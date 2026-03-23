@@ -164,6 +164,7 @@
             box-shadow: inset 0 0 0 1px rgba(111,98,79,.25);
             line-height: 0;
             flex-shrink: 0;
+            position: relative;
         }
 
         .cell {
@@ -172,25 +173,47 @@
             border-right:  1px solid var(--line);
             border-bottom: 1px solid var(--line);
             position: relative;
-            cursor: pointer;
+            cursor: default;
         }
         .cell.a { background: var(--cell-a); }
         .cell.b { background: var(--cell-b); }
 
-        .point {
+        .intersections-layer {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            inset: 0;
+            z-index: 3;
+        }
+
+        .intersection-hit {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            transform: translate(-50%, -50%);
+            border: 1px solid rgba(54,43,30,.24);
+            background: rgba(255, 255, 255, .72);
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .intersection-hit:hover {
+            background: rgba(255, 255, 255, .95);
+            border-color: rgba(54,43,30,.5);
+        }
+
+        .point-token {
+            position: absolute;
             width: calc(var(--cell-size) * 0.52);
             height: calc(var(--cell-size) * 0.52);
             transform: translate(-50%, -50%);
             border-radius: 999px;
             box-shadow: inset 0 0 0 1px rgba(0,0,0,.28);
+            pointer-events: none;
         }
 
-        .point.p1 { background: var(--accent-left); }
-        .point.p2 { background: var(--accent-right); }
-        .point.inv { box-shadow: inset 0 0 0 2px #f7f0dc, 0 0 0 2px rgba(0,0,0,.25); }
+        .point-token.p1 { background: var(--accent-left); }
+        .point-token.p2 { background: var(--accent-right); }
+        .point-token.inv { box-shadow: inset 0 0 0 2px #f7f0dc, 0 0 0 2px rgba(0,0,0,.25); }
 
         /* ── Rail ── */
         .rail {
@@ -479,12 +502,35 @@ const GameUi = {
             cell.className = `cell ${(row + col) % 2 === 0 ? "a" : "b"}`;
             cell.dataset.row = String(row);
             cell.dataset.col = String(col);
-            cell.addEventListener("click", () => this.placePoint(row, col));
             frag.appendChild(cell);
         }
 
         this.el.board.appendChild(frag);
+        this.renderIntersectionHits();
         this.renderPoints();
+    },
+
+    renderIntersectionHits() {
+        this.el.board.querySelectorAll(".intersections-layer").forEach(layer => layer.remove());
+
+        const layer = document.createElement("div");
+        layer.className = "intersections-layer";
+
+        const cs = this.getCellSize();
+        for (let row = 0; row <= this.state.rows; row++) {
+            for (let col = 0; col <= this.state.cols; col++) {
+                const hit = document.createElement("button");
+                hit.type = "button";
+                hit.className = "intersection-hit";
+                hit.title = `Croisement (${row}, ${col})`;
+                hit.style.top = `${this.BOARD_BORDER + row * cs}px`;
+                hit.style.left = `${this.BOARD_BORDER + col * cs}px`;
+                hit.addEventListener("click", () => this.placePoint(row, col));
+                layer.appendChild(hit);
+            }
+        }
+
+        this.el.board.appendChild(layer);
     },
 
     renderScores() {
@@ -505,23 +551,25 @@ const GameUi = {
     },
 
     renderPoints() {
-        this.el.board.querySelectorAll(".point").forEach(p => p.remove());
+        const layer = this.el.board.querySelector(".intersections-layer");
+        if (!layer) {
+            return;
+        }
+
+        layer.querySelectorAll(".point-token").forEach(p => p.remove());
 
         const pointsSource = this.state.replayMode ? this.state.replayPoints : this.state.points;
+        const cs = this.getCellSize();
+
         for (const point of pointsSource) {
             if (!this.isInBounds(point.row, point.col)) {
                 continue;
             }
-
-            const selector = `.cell[data-row="${point.row}"][data-col="${point.col}"]`;
-            const cell = this.el.board.querySelector(selector);
-            if (!cell) {
-                continue;
-            }
-
             const dot = document.createElement("div");
-            dot.className = `point ${point.ownerId === this.state.player1Id ? "p1" : "p2"}${point.isInvulnerable ? " inv" : ""}`;
-            cell.appendChild(dot);
+            dot.className = `point-token ${point.ownerId === this.state.player1Id ? "p1" : "p2"}${point.isInvulnerable ? " inv" : ""}`;
+            dot.style.top = `${this.BOARD_BORDER + point.row * cs}px`;
+            dot.style.left = `${this.BOARD_BORDER + point.col * cs}px`;
+            layer.appendChild(dot);
         }
     },
 
@@ -537,6 +585,7 @@ const GameUi = {
 
         window.addEventListener("resize", () => {
             this.syncLayout();
+            this.renderBoard();
             this.renderCannons();
         });
     },
@@ -807,7 +856,7 @@ const GameUi = {
     },
 
     isInBounds(row, col) {
-        return row >= 0 && row < this.state.rows && col >= 0 && col < this.state.cols;
+        return row >= 0 && row <= this.state.rows && col >= 0 && col <= this.state.cols;
     },
 
     /**
