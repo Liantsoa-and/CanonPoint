@@ -1,4 +1,5 @@
 using CanonPoint.App.Data;
+using CanonPoint.App.Domain.Services;
 using CanonPoint.App.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Builder;
@@ -11,6 +12,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString)
 );
 builder.Services.AddScoped<IGameService, GameService>();
+builder.Services.AddScoped<IGameStateFactory, GameStateFactory>();
 
 // Add services to the container
 builder.Services.AddControllers();

@@ -4,5 +4,5 @@ namespace CanonPoint.App.Domain.Services;
 
 public interface IGameStateFactory
 {
-    GameState CreateNew(int gameId, int rows, int cols);
+    GameState CreateNewGameState(int gameId, int rows, int cols);
 }
