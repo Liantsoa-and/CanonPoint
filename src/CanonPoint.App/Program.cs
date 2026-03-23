@@ -18,6 +18,7 @@ builder.Services.AddScoped<ILineDetectionService, LineDetectionService>();
 builder.Services.AddScoped<ILineValidationService, LineValidationService>();
 builder.Services.AddScoped<IShotService, ShotService>();
 builder.Services.AddScoped<ITurnService, TurnService>();
+builder.Services.AddScoped<IGameStateReconstructionService, GameStateReconstructionService>();
 
 // Add services to the container
 builder.Services.AddControllers();
