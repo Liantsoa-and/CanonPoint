@@ -60,6 +60,69 @@
             padding: 18px 20px 10px;
         }
 
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            padding: 0 20px 10px;
+        }
+
+        .pill {
+            border: 1px solid rgba(54,43,30,.2);
+            border-radius: 999px;
+            padding: 6px 12px;
+            background: #fff;
+            font-size: .9rem;
+            font-weight: 700;
+        }
+
+        .shot-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid rgba(54,43,30,.2);
+            border-radius: 999px;
+            padding: 4px 8px;
+            background: #fff;
+        }
+
+        .shot-controls label {
+            font-size: .85rem;
+            color: var(--muted);
+            font-weight: 700;
+        }
+
+        .shot-controls input {
+            width: 56px;
+            border: 1px solid rgba(54,43,30,.3);
+            border-radius: 8px;
+            padding: 4px 6px;
+            font-size: .9rem;
+        }
+
+        .btn {
+            border: 1px solid rgba(54,43,30,.25);
+            border-radius: 999px;
+            background: #fff;
+            padding: 7px 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn:hover { background: #f4ecdd; }
+
+        .message {
+            min-height: 20px;
+            padding: 0 20px 6px;
+            color: #4e4538;
+            font-size: .88rem;
+            font-weight: 700;
+        }
+
+        .message.error { color: #af3f2f; }
+        .message.ok { color: #2f6d3b; }
+
         .title { margin: 0; font-size: clamp(1.2rem, 2vw, 1.6rem); }
         .meta  { margin: 0; color: var(--muted); font-size: .9rem; }
 
@@ -89,9 +152,26 @@
             height: var(--cell-size);
             border-right:  1px solid var(--line);
             border-bottom: 1px solid var(--line);
+            position: relative;
+            cursor: pointer;
         }
         .cell.a { background: var(--cell-a); }
         .cell.b { background: var(--cell-b); }
+
+        .point {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: calc(var(--cell-size) * 0.52);
+            height: calc(var(--cell-size) * 0.52);
+            transform: translate(-50%, -50%);
+            border-radius: 999px;
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,.28);
+        }
+
+        .point.p1 { background: var(--accent-left); }
+        .point.p2 { background: var(--accent-right); }
+        .point.inv { box-shadow: inset 0 0 0 2px #f7f0dc, 0 0 0 2px rgba(0,0,0,.25); }
 
         /* ── Rail ── */
         .rail {
@@ -236,6 +316,16 @@
         <p class="meta" id="meta"></p>
     </header>
 
+    <section class="controls">
+        <span class="pill" id="turn-indicator">Tour: -</span>
+        <div class="shot-controls">
+            <label for="shot-power">Puissance</label>
+            <input id="shot-power" type="number" min="1" max="9" value="1">
+            <button class="btn" id="shoot-btn" type="button">Tirer</button>
+        </div>
+    </section>
+    <div class="message" id="message" aria-live="polite"></div>
+
     <section class="arena">
         <!-- Left rail -->
         <aside class="rail" aria-label="Contrôle joueur gauche">
@@ -277,10 +367,16 @@ const GameUi = {
         cols:    Number.parseInt(params.get("cols")    ?? "20", 10) || 20,
         player1: (params.get("player1") || "Joueur 1").trim(),
         player2: (params.get("player2") || "Joueur 2").trim(),
+        player1Id: Number.parseInt(params.get("player1Id") ?? "0", 10) || 0,
+        player2Id: Number.parseInt(params.get("player2Id") ?? "0", 10) || 0,
         leftRow:  0,
         rightRow: 0,
         score1: 0,
-        score2: 0
+        score2: 0,
+        points: [],
+        statusId: 0,
+        turnIndex: 0,
+        busy: false
     },
 
     el: {
@@ -295,12 +391,16 @@ const GameUi = {
         rightUp:     document.getElementById("right-up"),
         rightDown:   document.getElementById("right-down"),
         score1:      document.getElementById("score1"),
-        score2:      document.getElementById("score2")
+        score2:      document.getElementById("score2"),
+        turn:        document.getElementById("turn-indicator"),
+        shotPower:   document.getElementById("shot-power"),
+        shootBtn:    document.getElementById("shoot-btn"),
+        message:     document.getElementById("message")
     },
 
     BOARD_BORDER: 2, // px, each side
 
-    init() {
+    async init() {
         const s = this.state;
         s.rows = this.sanitize(s.rows);
         s.cols = this.sanitize(s.cols);
@@ -313,6 +413,7 @@ const GameUi = {
         this.bindEvents();
         this.syncLayout();
         this.renderCannons();
+        await this.loadStateFromServer();
     },
 
     sanitize(v) {
@@ -343,16 +444,39 @@ const GameUi = {
             cell.className = `cell ${(row + col) % 2 === 0 ? "a" : "b"}`;
             cell.dataset.row = String(row);
             cell.dataset.col = String(col);
+            cell.addEventListener("click", () => this.placePoint(row, col));
             frag.appendChild(cell);
         }
 
         this.el.board.appendChild(frag);
+        this.renderPoints();
     },
 
     renderScores() {
         const s = this.state;
-        this.el.score1.innerHTML = `<strong>${this.esc(s.player1)}:</strong> ${s.score1}`;
-        this.el.score2.innerHTML = `<strong>${this.esc(s.player2)}:</strong> ${s.score2}`;
+        this.el.score1.innerHTML = `<strong>${this.esc(s.player1)}:</strong> ${s.score1} points poses`;
+        this.el.score2.innerHTML = `<strong>${this.esc(s.player2)}:</strong> ${s.score2} points poses`;
+        this.el.turn.textContent = `Tour: ${this.esc(this.currentPlayerName())}`;
+    },
+
+    renderPoints() {
+        this.el.board.querySelectorAll(".point").forEach(p => p.remove());
+
+        for (const point of this.state.points) {
+            if (!this.isInBounds(point.row, point.col)) {
+                continue;
+            }
+
+            const selector = `.cell[data-row="${point.row}"][data-col="${point.col}"]`;
+            const cell = this.el.board.querySelector(selector);
+            if (!cell) {
+                continue;
+            }
+
+            const dot = document.createElement("div");
+            dot.className = `point ${point.ownerId === this.state.player1Id ? "p1" : "p2"}${point.isInvulnerable ? " inv" : ""}`;
+            cell.appendChild(dot);
+        }
     },
 
     bindEvents() {
@@ -360,6 +484,7 @@ const GameUi = {
         this.el.leftDown.addEventListener ("click", () => this.move("left",   1));
         this.el.rightUp.addEventListener  ("click", () => this.move("right", -1));
         this.el.rightDown.addEventListener("click", () => this.move("right",  1));
+        this.el.shootBtn.addEventListener("click", () => this.fireShot());
 
         window.addEventListener("resize", () => {
             this.syncLayout();
@@ -371,6 +496,152 @@ const GameUi = {
         const key = side === "left" ? "leftRow" : "rightRow";
         this.state[key] = this.clamp(this.state[key] + delta, 0, this.state.rows - 1);
         this.renderCannons();
+        this.setMessage(`${side === "left" ? this.state.player1 : this.state.player2} deplace son canon.`, false);
+    },
+
+    async loadStateFromServer() {
+        if (this.state.gameId <= 0) {
+            this.setMessage("Partie locale: API non connectee.", true);
+            return;
+        }
+
+        try {
+            const game = await this.getJson(`/api/games/${this.state.gameId}`);
+            this.state.rows = this.sanitize(game.gridRows ?? this.state.rows);
+            this.state.cols = this.sanitize(game.gridCols ?? this.state.cols);
+            this.state.points = Array.isArray(game.points) ? game.points : [];
+            this.state.statusId = game.statusId ?? 0;
+
+            this.state.score1 = this.state.points.filter(p => p.ownerId === this.state.player1Id).length;
+            this.state.score2 = this.state.points.filter(p => p.ownerId === this.state.player2Id).length;
+
+            this.renderMeta();
+            this.renderBoard();
+            this.syncLayout();
+            this.renderCannons();
+            this.renderScores();
+        } catch (error) {
+            this.setMessage(`Erreur chargement partie: ${error.message}`, true);
+        }
+    },
+
+    async placePoint(row, col) {
+        if (this.state.busy || this.state.gameId <= 0) {
+            return;
+        }
+
+        const playerId = this.currentPlayerId();
+        if (!playerId) {
+            this.setMessage("IDs des joueurs manquants. Reviens au formulaire.", true);
+            return;
+        }
+
+        this.state.busy = true;
+        this.setMessage("Placement en cours...", false);
+
+        try {
+            await this.postJson(`/api/games/${this.state.gameId}/points`, {
+                playerId,
+                row,
+                col,
+                isInvulnerable: false
+            });
+
+            this.toggleTurn();
+            await this.loadStateFromServer();
+            this.setMessage(`Point place en (${row}, ${col}).`, false);
+        } catch (error) {
+            this.setMessage(`Action invalide: ${error.message}`, true);
+        } finally {
+            this.state.busy = false;
+        }
+    },
+
+    async fireShot() {
+        if (this.state.busy || this.state.gameId <= 0) {
+            return;
+        }
+
+        const playerId = this.currentPlayerId();
+        const power = Number.parseInt(this.el.shotPower.value, 10);
+        const row = this.state.turnIndex === 0 ? this.state.leftRow : this.state.rightRow;
+
+        if (!playerId) {
+            this.setMessage("IDs des joueurs manquants. Reviens au formulaire.", true);
+            return;
+        }
+
+        if (!Number.isInteger(power) || power < 1 || power > 9) {
+            this.setMessage("Puissance invalide (1 a 9).", true);
+            return;
+        }
+
+        this.state.busy = true;
+        this.setMessage("Tir en cours...", false);
+
+        try {
+            const targetCol = this.state.turnIndex === 0 ? power - 1 : this.state.cols - power;
+            await this.postJson(`/api/games/${this.state.gameId}/shots`, {
+                playerId,
+                targetRow: row,
+                targetCol,
+                power
+            });
+
+            this.toggleTurn();
+            await this.loadStateFromServer();
+            this.setMessage(`Tir effectue (ligne ${row}, puissance ${power}).`, false);
+        } catch (error) {
+            this.setMessage(`Action invalide: ${error.message}`, true);
+        } finally {
+            this.state.busy = false;
+        }
+    },
+
+    currentPlayerId() {
+        return this.state.turnIndex === 0 ? this.state.player1Id : this.state.player2Id;
+    },
+
+    currentPlayerName() {
+        return this.state.turnIndex === 0 ? this.state.player1 : this.state.player2;
+    },
+
+    toggleTurn() {
+        this.state.turnIndex = this.state.turnIndex === 0 ? 1 : 0;
+        this.renderScores();
+    },
+
+    setMessage(message, isError) {
+        this.el.message.textContent = message;
+        this.el.message.className = `message ${isError ? "error" : "ok"}`;
+    },
+
+    async getJson(url) {
+        const response = await fetch(url);
+        if (!response.ok) {
+            const details = await response.text();
+            throw new Error(`${response.status} ${response.statusText}${details ? ` - ${details}` : ""}`);
+        }
+        return response.json();
+    },
+
+    async postJson(url, payload) {
+        const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const details = await response.text();
+            throw new Error(`${response.status} ${response.statusText}${details ? ` - ${details}` : ""}`);
+        }
+
+        return response.json();
+    },
+
+    isInBounds(row, col) {
+        return row >= 0 && row < this.state.rows && col >= 0 && col < this.state.cols;
     },
 
     /**
