@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CanonPoint - Nouvelle Partie</title>
+    <style>
+        :root {
+            --bg-1: #f2efe9;
+            --bg-2: #ded9cf;
+            --card: #fffdf9;
+            --text: #1e1b16;
+            --muted: #645d51;
+            --accent: #b64b2e;
+            --accent-2: #2b7f78;
+            --danger: #b23c2c;
+            --success: #2f6d3b;
+            --shadow: 0 18px 45px rgba(33, 25, 18, 0.15);
+            --radius: 18px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 12% 15%, rgba(182, 75, 46, 0.18), transparent 40%),
+                radial-gradient(circle at 85% 80%, rgba(43, 127, 120, 0.18), transparent 38%),
+                linear-gradient(140deg, var(--bg-1), var(--bg-2));
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+
+        .panel {
+            width: min(560px, 100%);
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(53, 44, 32, 0.08);
+            overflow: hidden;
+            animation: fadeIn 300ms ease-out;
+        }
+
+        .header {
+            padding: 24px 24px 6px 24px;
+        }
+
+        .eyebrow {
+            margin: 0;
+            color: var(--accent-2);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-size: 0.74rem;
+            font-weight: 700;
+        }
+
+        h1 {
+            margin: 8px 0 8px;
+            font-size: clamp(1.6rem, 4vw, 2.2rem);
+            line-height: 1.1;
+        }
+
+        .sub {
+            margin: 0;
+            color: var(--muted);
+        }
+
+        form {
+            padding: 18px 24px 24px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .field {
+            display: grid;
+            gap: 6px;
+        }
+
+        label {
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: #352d23;
+        }
+
+        input {
+            border: 1px solid #c6bcac;
+            border-radius: 12px;
+            padding: 11px 12px;
+            font-size: 1rem;
+            color: var(--text);
+            background: #fff;
+        }
+
+        input:focus {
+            outline: 3px solid rgba(182, 75, 46, 0.25);
+            border-color: var(--accent);
+        }
+
+        .hint {
+            font-size: 0.84rem;
+            color: var(--muted);
+            margin-top: -1px;
+        }
+
+        .cta {
+            margin-top: 6px;
+            border: 0;
+            border-radius: 999px;
+            padding: 12px 16px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            color: #fff;
+            background: linear-gradient(90deg, var(--accent), #ce6e41);
+            transition: transform 120ms ease, box-shadow 120ms ease;
+            box-shadow: 0 10px 24px rgba(182, 75, 46, 0.3);
+        }
+
+        .cta:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 24px rgba(182, 75, 46, 0.35);
+        }
+
+        .cta:disabled {
+            cursor: wait;
+            opacity: 0.8;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status {
+            min-height: 24px;
+            font-size: 0.92rem;
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
+        .status.error {
+            color: var(--danger);
+        }
+
+        .status.ok {
+            color: var(--success);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="panel">
+        <header class="header">
+            <p class="eyebrow">CanonPoint</p>
+            <h1>Debut de partie</h1>
+            <p class="sub">Cree les joueurs puis lance une nouvelle partie.</p>
+        </header>
+
+        <form id="start-game-form">
+            <div class="field">
+                <label for="player1">Nom du joueur 1</label>
+                <input id="player1" name="player1" type="text" required maxlength="60" placeholder="Ex: Alice">
+            </div>
+
+            <div class="field">
+                <label for="player2">Nom du joueur 2</label>
+                <input id="player2" name="player2" type="text" required maxlength="60" placeholder="Ex: Bob">
+            </div>
+
+            <div class="field">
+                <label for="gridSize">Nombre de cases (grille carree)</label>
+                <input id="gridSize" name="gridSize" type="number" min="3" max="100" value="20" required>
+                <p class="hint">Ce nombre sera utilise pour les lignes et les colonnes.</p>
+            </div>
+
+            <button class="cta" type="submit" id="play-button">Jouer</button>
+            <div id="status" class="status" aria-live="polite"></div>
+        </form>
+    </main>
+
+    <script>
+        const form = document.getElementById("start-game-form");
+        const statusBox = document.getElementById("status");
+        const playButton = document.getElementById("play-button");
+
+        function setStatus(message, isError = false) {
+            statusBox.textContent = message;
+            statusBox.className = `status ${isError ? "error" : "ok"}`;
+        }
+
+        function normalizeName(name) {
+            return name.trim();
+        }
+
+        async function postJson(url, payload) {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                let details = "";
+                try {
+                    details = await response.text();
+                } catch {
+                    details = "";
+                }
+
+                throw new Error(`${response.status} ${response.statusText}${details ? ` - ${details}` : ""}`);
+            }
+
+            return response.json();
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            setStatus("");
+
+            const player1Name = normalizeName(form.player1.value);
+            const player2Name = normalizeName(form.player2.value);
+            const gridSize = Number.parseInt(form.gridSize.value, 10);
+
+            if (!player1Name || !player2Name) {
+                setStatus("Les noms des deux joueurs sont obligatoires.", true);
+                return;
+            }
+
+            if (player1Name.toLowerCase() === player2Name.toLowerCase()) {
+                setStatus("Les deux joueurs doivent avoir des noms differents.", true);
+                return;
+            }
+
+            if (!Number.isInteger(gridSize) || gridSize < 3) {
+                setStatus("Le nombre de cases doit etre un entier superieur ou egal a 3.", true);
+                return;
+            }
+
+            playButton.disabled = true;
+            playButton.textContent = "Creation...";
+
+            try {
+                const player1 = await postJson("/api/players", { name: player1Name, colorHex: "#D95737" });
+                const player2 = await postJson("/api/players", { name: player2Name, colorHex: "#2C8C7A" });
+
+                const game = await postJson("/api/games", {
+                    name: `${player1Name} vs ${player2Name}`,
+                    gridRows: gridSize,
+                    gridCols: gridSize
+                });
+
+                const params = new URLSearchParams({
+                    gameId: String(game.id),
+                    rows: String(gridSize),
+                    cols: String(gridSize),
+                    player1: player1Name,
+                    player2: player2Name,
+                    player1Id: String(player1.id),
+                    player2Id: String(player2.id)
+                });
+
+                setStatus("Partie creee, redirection vers le plateau...");
+                window.location.href = `/plateau.html?${params.toString()}`;
+            } catch (error) {
+                setStatus(`Erreur pendant la creation: ${error.message}`, true);
+            } finally {
+                playButton.disabled = false;
+                playButton.textContent = "Jouer";
+            }
+        });
+    </script>
+</body>
+</html>

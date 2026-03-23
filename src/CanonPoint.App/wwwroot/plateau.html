@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CanonPoint - Plateau</title>
+    <style>
+        :root {
+            --bg-a: #f4f1eb;
+            --bg-b: #e3ddd1;
+            --panel: #fffdf9;
+            --text: #1e1b16;
+            --muted: #665f54;
+            --line: #9f9280;
+            --cell-a: #f7f2e8;
+            --cell-b: #eadfca;
+            --accent-left: #d95737;
+            --accent-right: #2c8c7a;
+            --board-border: #6f624f;
+            --score-bg: #f0e8da;
+            --shadow: 0 18px 45px rgba(33, 25, 18, 0.15);
+            --cell-size: 28px;
+            --rows: 20;
+            --board-border-width: 2px;
+            --arrow-h: 36px;
+            --arrow-gap: 6px;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 10% 15%, rgba(217,87,55,.16), transparent 38%),
+                radial-gradient(circle at 90% 85%, rgba(44,140,122,.16), transparent 42%),
+                linear-gradient(140deg, var(--bg-a), var(--bg-b));
+            padding: 20px;
+            display: grid;
+            place-items: center;
+        }
+
+        .layout {
+            width: min(1200px, 100%);
+            background: var(--panel);
+            border: 1px solid rgba(54,43,30,.1);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+            overflow: visible;
+            animation: intro 280ms ease-out;
+        }
+
+        .top {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: baseline;
+            padding: 18px 20px 10px;
+        }
+
+        .title { margin: 0; font-size: clamp(1.2rem, 2vw, 1.6rem); }
+        .meta  { margin: 0; color: var(--muted); font-size: .9rem; }
+
+        /* ── Arena ── */
+        .arena {
+            display: flex;
+            justify-content: center;
+            align-items: stretch;          /* rails stretch to board height */
+            gap: 10px;
+            /* vertical padding creates room for the absolutely-positioned arrows */
+            padding: calc(var(--arrow-h) + var(--arrow-gap) + 10px) 20px
+                     calc(var(--arrow-h) + var(--arrow-gap) + 14px);
+        }
+
+        /* ── Board ── */
+        .board {
+            display: grid;
+            border: var(--board-border-width) solid var(--board-border);
+            background: #fefaf3;
+            box-shadow: inset 0 0 0 1px rgba(111,98,79,.25);
+            line-height: 0;
+            flex-shrink: 0;
+        }
+
+        .cell {
+            width:  var(--cell-size);
+            height: var(--cell-size);
+            border-right:  1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+        }
+        .cell.a { background: var(--cell-a); }
+        .cell.b { background: var(--cell-b); }
+
+        /* ── Rail ── */
+        .rail {
+            position: relative;   /* anchor for absolute arrows */
+            width: 64px;
+            display: flex;        /* makes track fill the height */
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Track fills the rail, which stretches to board height */
+        .track {
+            flex: 1;
+            width: 52px;
+            border-radius: 10px;
+            border: 1px solid rgba(58,46,33,.35);
+            background:
+                repeating-linear-gradient(
+                    to bottom,
+                    rgba(90,76,58,.08)  0,
+                    rgba(90,76,58,.08)  calc(var(--cell-size) - 1px),
+                    rgba(90,76,58,.26)  calc(var(--cell-size) - 1px),
+                    rgba(90,76,58,.26)  var(--cell-size)
+                ),
+                #f6efe2;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Arrow buttons float outside the track, anchored to the rail */
+        .arrow {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 42px;
+            height: var(--arrow-h);
+            border: 1px solid rgba(58,46,33,.35);
+            border-radius: 10px;
+            background: #fff;
+            font-size: 1rem;
+            line-height: 1;
+            cursor: pointer;
+            z-index: 2;
+            transition: background 120ms;
+        }
+        .arrow:hover  { background: #f5ede0; }
+        .arrow:active { transform: translateX(-50%) translateY(1px); }
+
+        .arrow-up   { bottom: calc(100% + var(--arrow-gap)); }
+        .arrow-down { top:    calc(100% + var(--arrow-gap)); }
+
+        /* ── Cannon ── */
+        .cannon {
+            position: absolute;
+            left: 50%;
+            width:  calc(var(--cell-size) - 4px);
+            height: calc(var(--cell-size) - 4px);
+            min-width: 12px; min-height: 12px;
+            border-radius: 7px;
+            /* transform set by JS */
+            transform: translateX(-50%);
+            transition: transform 160ms cubic-bezier(.4,0,.2,1);
+            box-shadow: 0 3px 8px rgba(0,0,0,.22);
+        }
+
+        /* Barrel for left cannon → points RIGHT (toward board) */
+        .cannon.left {
+            background: linear-gradient(145deg, #f28e73, var(--accent-left));
+        }
+        .cannon.left::after {
+            content: "";
+            position: absolute;
+            right: -9px; top: 50%;
+            width: 10px; height: 4px;
+            border-radius: 2px;
+            transform: translateY(-50%);
+            background: rgba(28,21,14,.55);
+        }
+
+        /* Barrel for right cannon → points LEFT (toward board) */
+        .cannon.right {
+            background: linear-gradient(145deg, #62c0b2, var(--accent-right));
+        }
+        .cannon.right::after {
+            content: "";
+            position: absolute;
+            left: -9px; top: 50%;
+            width: 10px; height: 4px;
+            border-radius: 2px;
+            transform: translateY(-50%);
+            background: rgba(28,21,14,.55);
+        }
+
+        /* ── Scores ── */
+        .scores {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 0 20px 18px;
+        }
+
+        .score {
+            background: var(--score-bg);
+            border: 1px solid rgba(54,43,30,.16);
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: .95rem;
+            font-weight: 700;
+        }
+        .score strong { display: inline-block; min-width: 80px; }
+
+        .back {
+            display: inline-flex;
+            margin: 0 20px 14px;
+            color: #4b4134;
+            text-decoration: none;
+            font-size: .9rem;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 640px) {
+            body { padding: 8px; }
+            .layout { border-radius: 14px; }
+            .top { flex-direction: column; align-items: flex-start; gap: 4px; }
+            .arena { gap: 6px; padding-inline: 8px; }
+            .rail { width: 50px; }
+            .track { width: 40px; }
+            .arrow { width: 34px; height: 30px; }
+            .scores { grid-template-columns: 1fr; }
+        }
+
+        @keyframes intro {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+<main class="layout">
+    <header class="top">
+        <h1 class="title">Plateau de jeu</h1>
+        <p class="meta" id="meta"></p>
+    </header>
+
+    <section class="arena">
+        <!-- Left rail -->
+        <aside class="rail" aria-label="Contrôle joueur gauche">
+            <button class="arrow arrow-up"   id="left-up"   type="button" aria-label="Monter canon gauche">▲</button>
+            <div class="track" id="left-track">
+                <div class="cannon left" id="left-cannon"></div>
+            </div>
+            <button class="arrow arrow-down" id="left-down" type="button" aria-label="Descendre canon gauche">▼</button>
+        </aside>
+
+        <!-- Board -->
+        <div class="board" id="board" role="grid" aria-label="Plateau"></div>
+
+        <!-- Right rail -->
+        <aside class="rail" aria-label="Contrôle joueur droit">
+            <button class="arrow arrow-up"   id="right-up"   type="button" aria-label="Monter canon droit">▲</button>
+            <div class="track" id="right-track">
+                <div class="cannon right" id="right-cannon"></div>
+            </div>
+            <button class="arrow arrow-down" id="right-down" type="button" aria-label="Descendre canon droit">▼</button>
+        </aside>
+    </section>
+
+    <section class="scores">
+        <div class="score" id="score1"><strong>Joueur 1:</strong> 0</div>
+        <div class="score" id="score2"><strong>Joueur 2:</strong> 0</div>
+    </section>
+
+    <a class="back" href="/">← Retour au formulaire</a>
+</main>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+
+const GameUi = {
+    state: {
+        gameId:  Number.parseInt(params.get("gameId")  ?? "0",  10) || 0,
+        rows:    Number.parseInt(params.get("rows")    ?? "20", 10) || 20,
+        cols:    Number.parseInt(params.get("cols")    ?? "20", 10) || 20,
+        player1: (params.get("player1") || "Joueur 1").trim(),
+        player2: (params.get("player2") || "Joueur 2").trim(),
+        leftRow:  0,
+        rightRow: 0,
+        score1: 0,
+        score2: 0
+    },
+
+    el: {
+        board:       document.getElementById("board"),
+        meta:        document.getElementById("meta"),
+        leftCannon:  document.getElementById("left-cannon"),
+        rightCannon: document.getElementById("right-cannon"),
+        leftTrack:   document.getElementById("left-track"),
+        rightTrack:  document.getElementById("right-track"),
+        leftUp:      document.getElementById("left-up"),
+        leftDown:    document.getElementById("left-down"),
+        rightUp:     document.getElementById("right-up"),
+        rightDown:   document.getElementById("right-down"),
+        score1:      document.getElementById("score1"),
+        score2:      document.getElementById("score2")
+    },
+
+    BOARD_BORDER: 2, // px, each side
+
+    init() {
+        const s = this.state;
+        s.rows = this.sanitize(s.rows);
+        s.cols = this.sanitize(s.cols);
+        s.leftRow  = Math.floor(s.rows / 2);
+        s.rightRow = Math.floor(s.rows / 2);
+
+        this.renderMeta();
+        this.renderBoard();
+        this.renderScores();
+        this.bindEvents();
+        this.syncLayout();
+        this.renderCannons();
+    },
+
+    sanitize(v) {
+        return Number.isInteger(v) ? Math.min(100, Math.max(3, v)) : 20;
+    },
+
+    renderMeta() {
+        const s = this.state;
+        const parts = [
+            s.gameId > 0 ? `Partie #${s.gameId}` : "Partie locale",
+            `${s.rows} × ${s.cols}`
+        ];
+        this.el.meta.textContent = parts.join(" — ");
+    },
+
+    renderBoard() {
+        const { rows, cols } = this.state;
+        const frag = document.createDocumentFragment();
+
+        this.el.board.innerHTML = "";
+        this.el.board.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size))`;
+        this.el.board.style.gridTemplateRows    = `repeat(${rows}, var(--cell-size))`;
+
+        for (let i = 0; i < rows * cols; i++) {
+            const row = Math.floor(i / cols);
+            const col = i % cols;
+            const cell = document.createElement("div");
+            cell.className = `cell ${(row + col) % 2 === 0 ? "a" : "b"}`;
+            cell.dataset.row = String(row);
+            cell.dataset.col = String(col);
+            frag.appendChild(cell);
+        }
+
+        this.el.board.appendChild(frag);
+    },
+
+    renderScores() {
+        const s = this.state;
+        this.el.score1.innerHTML = `<strong>${this.esc(s.player1)}:</strong> ${s.score1}`;
+        this.el.score2.innerHTML = `<strong>${this.esc(s.player2)}:</strong> ${s.score2}`;
+    },
+
+    bindEvents() {
+        this.el.leftUp.addEventListener   ("click", () => this.move("left",  -1));
+        this.el.leftDown.addEventListener ("click", () => this.move("left",   1));
+        this.el.rightUp.addEventListener  ("click", () => this.move("right", -1));
+        this.el.rightDown.addEventListener("click", () => this.move("right",  1));
+
+        window.addEventListener("resize", () => {
+            this.syncLayout();
+            this.renderCannons();
+        });
+    },
+
+    move(side, delta) {
+        const key = side === "left" ? "leftRow" : "rightRow";
+        this.state[key] = this.clamp(this.state[key] + delta, 0, this.state.rows - 1);
+        this.renderCannons();
+    },
+
+    /**
+     * Position each cannon so its vertical center aligns with the
+     * center of its target row in the board.
+     *
+     * Coordinate origin: top of the track element.
+     * The track's top edge is flush with the board element's top edge
+     * (both are flex/stretch siblings in .arena).
+     *
+     * Row N in the board starts at:
+     *   BOARD_BORDER + N × cellSize   (from the board/track top)
+     *
+     * Cannon height = cellSize − 4px
+     * To vertically center cannon inside row N:
+     *   cannonTop = boardBorder + N × cs + (cs − cannonHeight) / 2
+     *             = 2 + N × cs + 2
+     *             = 4 + N × cs
+     */
+    renderCannons() {
+        const cs = this.getCellSize();
+        const cannonTop = (row) => this.BOARD_BORDER + row * cs + this.BOARD_BORDER;
+
+        const yL = cannonTop(this.state.leftRow);
+        const yR = cannonTop(this.state.rightRow);
+
+        this.el.leftCannon.style.transform  = `translateX(-50%) translateY(${yL}px)`;
+        this.el.rightCannon.style.transform = `translateX(-50%) translateY(${yR}px)`;
+    },
+
+    syncLayout() {
+        const cs = this.computeCellSize(this.state.rows, this.state.cols);
+        document.documentElement.style.setProperty("--rows",     String(this.state.rows));
+        document.documentElement.style.setProperty("--cell-size", `${cs}px`);
+    },
+
+    computeCellSize(rows, cols) {
+        // Subtract rails (2 × 74px), gaps (2 × 10px), page padding (40px)
+        const wBudget = Math.max(240, window.innerWidth  - 208);
+        // Subtract header (~60px), scores (~80px), back link (~36px),
+        // top/bottom arena padding (arrows + gap: ~96px), page padding (40px)
+        const hBudget = Math.max(240, window.innerHeight - 312);
+        const byW = Math.floor(wBudget / cols);
+        const byH = Math.floor(hBudget / rows);
+        return this.clamp(Math.min(byW, byH), 16, 52);
+    },
+
+    getCellSize() {
+        const v = getComputedStyle(document.documentElement)
+            .getPropertyValue("--cell-size").trim();
+        const n = Number.parseInt(v, 10);
+        return Number.isInteger(n) ? n : 28;
+    },
+
+    clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); },
+
+    esc(t) {
+        return t
+            .replaceAll("&",  "&amp;")
+            .replaceAll("<",  "&lt;")
+            .replaceAll(">",  "&gt;")
+            .replaceAll('"',  "&quot;")
+            .replaceAll("'",  "&#039;");
+    }
+};
+
+GameUi.init();
+</script>
+</body>
+</html>

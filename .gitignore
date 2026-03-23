@@ -1,0 +1,50 @@
+# Build outputs
+bin/
+obj/
+out/
+publish/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio / Rider
+.vs/
+.idea/
+_ReSharper*/
+*.DotSettings.user
+
+# VS Code workspace-local files
+.vscode/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+!**/packages/build/
+
+# Logs
+*.log
+logs/
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment/secrets
+.env
+.env.*
+secrets.json
+
+# App local overrides (keep appsettings.json and appsettings.Development.json tracked)
+appsettings.Local.json
+appsettings.*.Local.json
