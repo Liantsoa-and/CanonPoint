@@ -7,6 +7,39 @@ namespace CanonPoint.App.Tests.Domain;
 public class PlacementServiceTests
 {
     [Fact]
+    public void TryPlacePoint_WhenOnTopLeftCorner_ReturnsSuccess()
+    {
+        var factory = new GameStateFactory();
+        var placement = new PlacementService();
+        var gameState = factory.CreateNewGameState(gameId: 1, rows: 5, cols: 5);
+
+        var result = placement.TryPlacePoint(gameState, PlayerSide.Player1, row: 0, col: 0);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Position);
+        Assert.Equal(0, result.Position!.Value.Row);
+        Assert.Equal(0, result.Position!.Value.Col);
+        Assert.Equal(PlayerSide.Player1, gameState.GetCell(0, 0).Owner);
+    }
+
+    [Fact]
+    public void TryPlacePoint_WhenOnBottomRightCorner_ReturnsSuccess()
+    {
+        var factory = new GameStateFactory();
+        var placement = new PlacementService();
+        var gameState = factory.CreateNewGameState(gameId: 1, rows: 5, cols: 5);
+
+        // Intersections on a 5x5 board go from 0..5.
+        var result = placement.TryPlacePoint(gameState, PlayerSide.Player1, row: 5, col: 5);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.Position);
+        Assert.Equal(5, result.Position!.Value.Row);
+        Assert.Equal(5, result.Position!.Value.Col);
+        Assert.Equal(PlayerSide.Player1, gameState.GetCell(5, 5).Owner);
+    }
+
+    [Fact]
     public void TryPlacePoint_WhenOutOfBounds_ReturnsError()
     {
         var factory = new GameStateFactory();
