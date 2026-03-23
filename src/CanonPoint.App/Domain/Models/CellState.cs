@@ -4,6 +4,7 @@ namespace CanonPoint.App.Domain.Models;
 
 public sealed class CellState
 {
+    // Row/Col represent an intersection coordinate of the board grid.
     public CellState(int row, int col, PlayerSide? owner = null, bool isInvulnerable = false)
     {
         if (isInvulnerable && (!owner.HasValue || owner.Value == PlayerSide.None))
@@ -31,6 +32,8 @@ public sealed class CellState
 
         Owner = owner;
     }
+
+    public bool IsEmpty() => !Owner.HasValue;
 
     public void SetInvulnerable(bool isInvulnerable)
     {

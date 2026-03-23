@@ -35,7 +35,7 @@ public class GameStateFactoryTests
         Assert.Equal(0, second.RightCanonRow);
 
         Assert.Equal(first.Cells.Count, second.Cells.Count);
-        Assert.Equal(400, first.Cells.Count);
+        Assert.Equal(441, first.Cells.Count);
 
         Assert.All(first.Cells.Values, cell =>
         {

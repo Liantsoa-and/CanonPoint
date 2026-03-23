@@ -13,6 +13,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 );
 builder.Services.AddScoped<IGameService, GameService>();
 builder.Services.AddScoped<IGameStateFactory, GameStateFactory>();
+builder.Services.AddScoped<IPlacementService, PlacementService>();
 
 // Add services to the container
 builder.Services.AddControllers();
