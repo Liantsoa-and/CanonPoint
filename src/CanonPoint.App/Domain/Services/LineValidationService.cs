@@ -36,6 +36,11 @@ public sealed class LineValidationService : ILineValidationService
                 continue;
             }
 
+            if (ContainsAdverseInvulnerableWall(gameState, line, player))
+            {
+                continue;
+            }
+
             if (!AllCellsBelongToPlayer(gameState, line, player))
             {
                 continue;
@@ -48,6 +53,25 @@ public sealed class LineValidationService : ILineValidationService
         }
 
         return validated;
+    }
+
+    private static bool ContainsAdverseInvulnerableWall(GameState gameState, LineData line, PlayerSide player)
+    {
+        foreach (var position in line.Cells)
+        {
+            if (!gameState.IsIntersectionInBounds(position.Row, position.Col))
+            {
+                return true;
+            }
+
+            var cell = gameState.GetCell(position.Row, position.Col);
+            if (cell.Owner.HasValue && cell.Owner.Value != player && cell.IsInvulnerable)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool AllCellsBelongToPlayer(GameState gameState, LineData line, PlayerSide player)
