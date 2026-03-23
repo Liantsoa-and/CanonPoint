@@ -87,6 +87,24 @@
             background: #fff;
         }
 
+        .replay-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid rgba(54,43,30,.2);
+            border-radius: 999px;
+            padding: 4px 8px;
+            background: #fff;
+        }
+
+        .replay-index {
+            font-size: .85rem;
+            font-weight: 700;
+            color: var(--muted);
+            min-width: 96px;
+            text-align: center;
+        }
+
         .shot-controls label {
             font-size: .85rem;
             color: var(--muted);
@@ -111,6 +129,7 @@
         }
 
         .btn:hover { background: #f4ecdd; }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
 
         .message {
             min-height: 20px;
@@ -323,6 +342,12 @@
             <input id="shot-power" type="number" min="1" max="9" value="1">
             <button class="btn" id="shoot-btn" type="button">Tirer</button>
         </div>
+        <div class="replay-controls">
+            <button class="btn" id="replay-toggle" type="button">Mode replay</button>
+            <button class="btn" id="replay-prev" type="button" title="Move precedent">◀</button>
+            <span class="replay-index" id="replay-index">Replay: -</span>
+            <button class="btn" id="replay-next" type="button" title="Move suivant">▶</button>
+        </div>
     </section>
     <div class="message" id="message" aria-live="polite"></div>
 
@@ -374,8 +399,14 @@ const GameUi = {
         score1: 0,
         score2: 0,
         points: [],
+        moves: [],
+        pointsById: new Map(),
+        shotsById: new Map(),
         statusId: 0,
         turnIndex: 0,
+        replayMode: false,
+        currentMoveIndex: -1,
+        replayPoints: [],
         busy: false
     },
 
@@ -395,7 +426,11 @@ const GameUi = {
         turn:        document.getElementById("turn-indicator"),
         shotPower:   document.getElementById("shot-power"),
         shootBtn:    document.getElementById("shoot-btn"),
-        message:     document.getElementById("message")
+        message:     document.getElementById("message"),
+        replayToggle: document.getElementById("replay-toggle"),
+        replayPrev:   document.getElementById("replay-prev"),
+        replayNext:   document.getElementById("replay-next"),
+        replayIndex:  document.getElementById("replay-index")
     },
 
     BOARD_BORDER: 2, // px, each side
@@ -454,15 +489,26 @@ const GameUi = {
 
     renderScores() {
         const s = this.state;
-        this.el.score1.innerHTML = `<strong>${this.esc(s.player1)}:</strong> ${s.score1} points poses`;
-        this.el.score2.innerHTML = `<strong>${this.esc(s.player2)}:</strong> ${s.score2} points poses`;
-        this.el.turn.textContent = `Tour: ${this.esc(this.currentPlayerName())}`;
+        const p1 = s.replayMode
+            ? s.replayPoints.filter(p => p.ownerId === s.player1Id).length
+            : s.score1;
+        const p2 = s.replayMode
+            ? s.replayPoints.filter(p => p.ownerId === s.player2Id).length
+            : s.score2;
+
+        this.el.score1.innerHTML = `<strong>${this.esc(s.player1)}:</strong> ${p1} points poses`;
+        this.el.score2.innerHTML = `<strong>${this.esc(s.player2)}:</strong> ${p2} points poses`;
+        this.el.turn.textContent = `Tour: ${this.esc(this.currentPlayerName())}${s.replayMode ? " (replay)" : ""}`;
+        this.el.replayIndex.textContent = s.replayMode
+            ? `Replay: ${s.currentMoveIndex + 1}/${s.moves.length}`
+            : "Replay: -";
     },
 
     renderPoints() {
         this.el.board.querySelectorAll(".point").forEach(p => p.remove());
 
-        for (const point of this.state.points) {
+        const pointsSource = this.state.replayMode ? this.state.replayPoints : this.state.points;
+        for (const point of pointsSource) {
             if (!this.isInBounds(point.row, point.col)) {
                 continue;
             }
@@ -485,6 +531,9 @@ const GameUi = {
         this.el.rightUp.addEventListener  ("click", () => this.move("right", -1));
         this.el.rightDown.addEventListener("click", () => this.move("right",  1));
         this.el.shootBtn.addEventListener("click", () => this.fireShot());
+        this.el.replayToggle.addEventListener("click", () => this.toggleReplayMode());
+        this.el.replayPrev.addEventListener("click", () => this.stepReplay(-1));
+        this.el.replayNext.addEventListener("click", () => this.stepReplay(1));
 
         window.addEventListener("resize", () => {
             this.syncLayout();
@@ -493,6 +542,11 @@ const GameUi = {
     },
 
     move(side, delta) {
+        if (this.state.replayMode) {
+            this.setMessage("Replay actif: deplacement des canons bloque.", true);
+            return;
+        }
+
         const key = side === "left" ? "leftRow" : "rightRow";
         this.state[key] = this.clamp(this.state[key] + delta, 0, this.state.rows - 1);
         this.renderCannons();
@@ -510,22 +564,44 @@ const GameUi = {
             this.state.rows = this.sanitize(game.gridRows ?? this.state.rows);
             this.state.cols = this.sanitize(game.gridCols ?? this.state.cols);
             this.state.points = Array.isArray(game.points) ? game.points : [];
+            this.state.moves = Array.isArray(game.moves)
+                ? [...game.moves].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+                : [];
+
+            this.state.pointsById = new Map(
+                this.state.points.map(p => [p.id, p])
+            );
+
+            const shots = Array.isArray(game.shots) ? game.shots : [];
+            this.state.shotsById = new Map(shots.map(s => [s.id, s]));
             this.state.statusId = game.statusId ?? 0;
+            this.state.turnIndex = this.state.moves.length % 2;
 
             this.state.score1 = this.state.points.filter(p => p.ownerId === this.state.player1Id).length;
             this.state.score2 = this.state.points.filter(p => p.ownerId === this.state.player2Id).length;
+
+            if (this.state.replayMode) {
+                this.state.currentMoveIndex = this.state.moves.length - 1;
+                this.rebuildReplayState();
+            }
 
             this.renderMeta();
             this.renderBoard();
             this.syncLayout();
             this.renderCannons();
             this.renderScores();
+            this.updateReplayButtons();
         } catch (error) {
             this.setMessage(`Erreur chargement partie: ${error.message}`, true);
         }
     },
 
     async placePoint(row, col) {
+        if (this.state.replayMode) {
+            this.setMessage("Replay actif: impossible de jouer un coup.", true);
+            return;
+        }
+
         if (this.state.busy || this.state.gameId <= 0) {
             return;
         }
@@ -558,6 +634,11 @@ const GameUi = {
     },
 
     async fireShot() {
+        if (this.state.replayMode) {
+            this.setMessage("Replay actif: impossible de tirer.", true);
+            return;
+        }
+
         if (this.state.busy || this.state.gameId <= 0) {
             return;
         }
@@ -609,6 +690,91 @@ const GameUi = {
     toggleTurn() {
         this.state.turnIndex = this.state.turnIndex === 0 ? 1 : 0;
         this.renderScores();
+    },
+
+    toggleReplayMode() {
+        this.state.replayMode = !this.state.replayMode;
+
+        if (this.state.replayMode) {
+            this.state.currentMoveIndex = this.state.moves.length - 1;
+            this.rebuildReplayState();
+            this.setMessage("Mode replay active.", false);
+        } else {
+            this.state.replayPoints = [];
+            this.state.turnIndex = this.state.moves.length % 2;
+            this.setMessage("Mode replay desactive.", false);
+        }
+
+        this.renderPoints();
+        this.renderScores();
+        this.updateReplayButtons();
+    },
+
+    stepReplay(delta) {
+        if (!this.state.replayMode) {
+            this.setMessage("Active d'abord le mode replay.", true);
+            return;
+        }
+
+        const next = this.clamp(this.state.currentMoveIndex + delta, -1, this.state.moves.length - 1);
+        this.state.currentMoveIndex = next;
+        this.rebuildReplayState();
+        this.renderPoints();
+        this.renderScores();
+        this.updateReplayButtons();
+    },
+
+    rebuildReplayState() {
+        const board = new Map();
+
+        for (let i = 0; i <= this.state.currentMoveIndex; i++) {
+            const move = this.state.moves[i];
+            if (!move) {
+                continue;
+            }
+
+            if (!move.isShot) {
+                const point = this.state.pointsById.get(move.pointId);
+                if (!point) {
+                    continue;
+                }
+
+                board.set(`${point.row}:${point.col}`, { ...point });
+                continue;
+            }
+
+            const shot = this.state.shotsById.get(move.shotId);
+            if (!shot) {
+                continue;
+            }
+
+            const key = `${shot.targetRow}:${shot.targetCol}`;
+            const target = board.get(key);
+            if (!target) {
+                continue;
+            }
+
+            if (target.ownerId === move.playerId) {
+                continue;
+            }
+
+            if (target.isInvulnerable) {
+                continue;
+            }
+
+            board.delete(key);
+        }
+
+        this.state.replayPoints = Array.from(board.values());
+        this.state.turnIndex = (this.state.currentMoveIndex + 1) % 2;
+    },
+
+    updateReplayButtons() {
+        const on = this.state.replayMode;
+        this.el.replayPrev.disabled = !on || this.state.currentMoveIndex <= -1;
+        this.el.replayNext.disabled = !on || this.state.currentMoveIndex >= this.state.moves.length - 1;
+        this.el.replayToggle.textContent = on ? "Quitter replay" : "Mode replay";
+        this.el.shootBtn.disabled = on;
     },
 
     setMessage(message, isError) {
