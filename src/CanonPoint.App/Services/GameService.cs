@@ -127,6 +127,8 @@ public class GameService : IGameService
             return null;
         }
 
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
         var point = new Point
         {
             GameId = gameId,
@@ -151,6 +153,7 @@ public class GameService : IGameService
 
         _dbContext.Moves.Add(move);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return new MoveResponseDto
         {
@@ -182,6 +185,8 @@ public class GameService : IGameService
             return null;
         }
 
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
         var shot = new Shot
         {
             GameId = gameId,
@@ -206,6 +211,7 @@ public class GameService : IGameService
 
         _dbContext.Moves.Add(move);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return new MoveResponseDto
         {
