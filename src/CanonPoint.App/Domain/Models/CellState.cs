@@ -33,6 +33,12 @@ public sealed class CellState
         Owner = owner;
     }
 
+    public void ClearOwner()
+    {
+        Owner = null;
+        IsInvulnerable = false;
+    }
+
     public bool IsEmpty() => !Owner.HasValue;
 
     public void SetInvulnerable(bool isInvulnerable)
