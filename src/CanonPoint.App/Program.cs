@@ -17,6 +17,7 @@ builder.Services.AddScoped<IPlacementService, PlacementService>();
 builder.Services.AddScoped<ILineDetectionService, LineDetectionService>();
 builder.Services.AddScoped<ILineValidationService, LineValidationService>();
 builder.Services.AddScoped<IShotService, ShotService>();
+builder.Services.AddScoped<ITurnService, TurnService>();
 
 // Add services to the container
 builder.Services.AddControllers();

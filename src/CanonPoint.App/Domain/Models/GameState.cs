@@ -48,9 +48,29 @@ public sealed class GameState
 
     public int LeftCanonRow { get; private set; }
     public int RightCanonRow { get; private set; }
+    public int NextSequenceNumber { get; private set; } = 1;
 
     public Dictionary<BoardPosition, CellState> Cells { get; }
     public HashSet<string> CountedLineHashes { get; }
+
+    public int ConsumeNextSequenceNumber()
+    {
+        var current = NextSequenceNumber;
+        NextSequenceNumber += 1;
+        return current;
+    }
+
+    public bool HasAnyEmptyIntersection()
+    {
+        return Cells.Values.Any(c => c.IsEmpty());
+    }
+
+    public void SwitchCurrentPlayer()
+    {
+        CurrentPlayer = CurrentPlayer == PlayerSide.Player1
+            ? PlayerSide.Player2
+            : PlayerSide.Player1;
+    }
 
     public bool IsIntersectionInBounds(int row, int col)
     {
