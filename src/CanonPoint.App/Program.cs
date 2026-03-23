@@ -15,6 +15,7 @@ builder.Services.AddScoped<IGameService, GameService>();
 builder.Services.AddScoped<IGameStateFactory, GameStateFactory>();
 builder.Services.AddScoped<IPlacementService, PlacementService>();
 builder.Services.AddScoped<ILineDetectionService, LineDetectionService>();
+builder.Services.AddScoped<ILineValidationService, LineValidationService>();
 
 // Add services to the container
 builder.Services.AddControllers();
