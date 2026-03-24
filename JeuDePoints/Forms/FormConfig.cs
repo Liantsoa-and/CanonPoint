@@ -211,7 +211,7 @@ namespace JeuDePoints.Forms
                         _snapshotRepo,
                         moves,
                         latestMove,
-                        true);
+                        false);
 
                     replayForm.Show();
                     Hide();
@@ -224,11 +224,27 @@ namespace JeuDePoints.Forms
                 return;
             }
 
-            MessageBox.Show(
-                $"Continuer la partie #{row.GameId} (a brancher ensuite)",
-                "Information",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            try
+            {
+                int latestMove;
+                var state = _gameService.LoadLatestSnapshotState(row.GameId, out latestMove);
+                var moves = _snapshotRepo.GetSnapshotMoveNumbers(row.GameId);
+
+                var continueForm = new FormGame(
+                    state,
+                    _gameService,
+                    _snapshotRepo,
+                    moves,
+                    latestMove,
+                    true);
+
+                continueForm.Show();
+                Hide();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Chargement impossible", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         private void BtnStart_Click(object? sender, EventArgs e)
@@ -246,7 +262,7 @@ namespace JeuDePoints.Forms
 
             LoadGamesList();
 
-            var formGame = new FormGame(state, _gameService);
+            var formGame = new FormGame(state, _gameService, _snapshotRepo);
             formGame.Show();
             Hide();
         }

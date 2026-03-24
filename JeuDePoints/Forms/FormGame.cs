@@ -26,19 +26,24 @@ namespace JeuDePoints.Forms
         private Button _btnNext;
         private Label _lblReplay;
         private int _moveNumber = 0;
-        private readonly bool _isReplayMode;
+        private bool _isReadOnlyTimelineMode;
+        private readonly bool _canEditAtLatest;
         private readonly SnapshotRepository? _snapshotRepo;
         private readonly List<int> _replayMoveNumbers;
         private int _replayIndex = -1;
 
-        public FormGame(GameState state, GameService gameService)
+        public FormGame(GameState state, GameService gameService, SnapshotRepository snapshotRepo)
         {
             _state = state;
             _gameService = gameService;
-            _isReplayMode = false;
+            _snapshotRepo = snapshotRepo;
+            _isReadOnlyTimelineMode = false;
+            _canEditAtLatest = true;
             _replayMoveNumbers = new List<int>();
             InitializeComponents();
+            ReloadTimelineMoves(snapToLatest: true);
             RefreshAll();
+            UpdateReplayControls();
         }
 
         public FormGame(
@@ -47,12 +52,12 @@ namespace JeuDePoints.Forms
             SnapshotRepository snapshotRepo,
             List<int> replayMoveNumbers,
             int initialMoveNumber,
-            bool isReplayMode)
+            bool canResumeFromLatest)
         {
             _state = state;
             _gameService = gameService;
             _snapshotRepo = snapshotRepo;
-            _isReplayMode = isReplayMode;
+            _canEditAtLatest = canResumeFromLatest;
             _replayMoveNumbers = replayMoveNumbers.OrderBy(x => x).ToList();
             _moveNumber = initialMoveNumber;
             _replayIndex = _replayMoveNumbers.FindIndex(x => x == initialMoveNumber);
@@ -61,6 +66,8 @@ namespace JeuDePoints.Forms
                 _replayIndex = _replayMoveNumbers.Count - 1;
                 _moveNumber = _replayMoveNumbers[_replayIndex];
             }
+
+            _isReadOnlyTimelineMode = !_canEditAtLatest || !IsAtLatestSnapshot();
 
             InitializeComponents();
             RefreshAll();
@@ -83,9 +90,9 @@ namespace JeuDePoints.Forms
             _btnEnd = new Button { Text = "Terminer", Location = new SystemPoint(20, 10), Size = new Size(120, 30), BackColor = Color.DarkRed, ForeColor = Color.White };
             _btnUndo = new Button { Text = "Restaurer (Ctrl+Z)", Location = new SystemPoint(160, 10), Size = new Size(150, 30), BackColor = Color.DarkOrange, ForeColor = Color.White };
             _btnReset = new Button { Text = "Réinitialiser", Location = new SystemPoint(330, 10), Size = new Size(120, 30), BackColor = Color.DarkGreen, ForeColor = Color.White };
-            _btnPrev = new Button { Text = "Précédent", Location = new SystemPoint(470, 10), Size = new Size(120, 30), BackColor = Color.DimGray, ForeColor = Color.White, Visible = _isReplayMode };
-            _btnNext = new Button { Text = "Suivant", Location = new SystemPoint(600, 10), Size = new Size(120, 30), BackColor = Color.DimGray, ForeColor = Color.White, Visible = _isReplayMode };
-            _lblReplay = new Label { Text = "", Location = new SystemPoint(740, 14), Size = new Size(320, 22), ForeColor = Color.Gainsboro, Visible = _isReplayMode };
+            _btnPrev = new Button { Text = "Précédent", Location = new SystemPoint(470, 10), Size = new Size(120, 30), BackColor = Color.DimGray, ForeColor = Color.White, Visible = _snapshotRepo != null };
+            _btnNext = new Button { Text = "Suivant", Location = new SystemPoint(600, 10), Size = new Size(120, 30), BackColor = Color.DimGray, ForeColor = Color.White, Visible = _snapshotRepo != null };
+            _lblReplay = new Label { Text = "", Location = new SystemPoint(730, 14), Size = new Size(360, 22), ForeColor = Color.Gainsboro, Visible = _snapshotRepo != null };
             _btnEnd.Click += (s, e) => EndGame();
             _btnUndo.Click += (s, e) => UndoMove();
             _btnReset.Click += (s, e) => ResetGame();
@@ -108,15 +115,26 @@ namespace JeuDePoints.Forms
             _boardPanel.IntersectionClicked += OnIntersectionClicked;
             Controls.Add(_boardPanel);
 
-            if (_isReplayMode)
+            if (_isReadOnlyTimelineMode)
             {
-                Text = "Jeu de Points - Replay";
-                _btnEnd.Enabled = false;
-                _btnUndo.Enabled = false;
-                _btnReset.Enabled = false;
-                _cannon1.Enabled = false;
-                _cannon2.Enabled = false;
+                Text = _canEditAtLatest
+                    ? "Jeu de Points - Historique"
+                    : "Jeu de Points - Replay";
+                SetInteractiveControlsEnabled(false);
             }
+            else if (_snapshotRepo != null)
+            {
+                Text = "Jeu de Points";
+            }
+        }
+
+        private void SetInteractiveControlsEnabled(bool enabled)
+        {
+            _btnEnd.Enabled = enabled;
+            _btnUndo.Enabled = enabled;
+            _btnReset.Enabled = enabled;
+            _cannon1.Enabled = enabled;
+            _cannon2.Enabled = enabled;
         }
 
         private void RefreshAll()
@@ -129,13 +147,15 @@ namespace JeuDePoints.Forms
 
         private void OnIntersectionClicked(int row, int col)
         {
-            if (_isReplayMode) return;
+            if (_isReadOnlyTimelineMode) return;
             if (_state.IsFinished()) return;
             try
             {
                 _state = _gameService.PlacePoint(_state, row, col);
                 _moveNumber++;
+                ReloadTimelineMoves(snapToLatest: true);
                 RefreshAll();
+                UpdateReplayControls();
             }
             catch (Exception ex)
             {
@@ -145,14 +165,14 @@ namespace JeuDePoints.Forms
 
         private void OnCannonMoved(int playerId, Direction direction)
         {
-            if (_isReplayMode) return;
+            if (_isReadOnlyTimelineMode) return;
             _state = _gameService.MoveCannon(_state, playerId, direction);
             RefreshAll();
         }
 
         private void FormGame_KeyDown(object? sender, KeyEventArgs e)
         {
-            if (_isReplayMode) return;
+            if (_isReadOnlyTimelineMode) return;
             if (_state.IsFinished()) return;
             if (!e.Control) return;
 
@@ -178,7 +198,9 @@ namespace JeuDePoints.Forms
                 {
                     _state = _gameService.ShootCannon(_state, power);
                     _moveNumber++;
+                    ReloadTimelineMoves(snapToLatest: true);
                     RefreshAll();
+                    UpdateReplayControls();
 
                     if (!_state.LastShotWasValid)
                     {
@@ -204,12 +226,14 @@ namespace JeuDePoints.Forms
 
         private void UndoMove()
         {
-            if (_isReplayMode) return;
+            if (_isReadOnlyTimelineMode) return;
             try
             {
                 _state = _gameService.UndoLastMove(_state);
                 if (_moveNumber > 0) _moveNumber--;
+                ReloadTimelineMoves(snapToLatest: true);
                 RefreshAll();
+                UpdateReplayControls();
             }
             catch (Exception ex)
             {
@@ -219,19 +243,21 @@ namespace JeuDePoints.Forms
 
         private void ResetGame()
         {
-            if (_isReplayMode) return;
+            if (_isReadOnlyTimelineMode) return;
             if (MessageBox.Show("Réinitialiser la partie ?", "Confirmation",
                 MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
                 _state = _gameService.ResetGame(_state);
                 _moveNumber = 0;
+                ReloadTimelineMoves(snapToLatest: true);
                 RefreshAll();
+                UpdateReplayControls();
             }
         }
 
         private void EndGame()
         {
-            if (_isReplayMode) return;
+            if (_isReadOnlyTimelineMode) return;
             _state = _gameService.EndGame(_state);
             string winner = _state.ScoreP1 > _state.ScoreP2 ? _state.Player1Name
                 : _state.ScoreP2 > _state.ScoreP1 ? _state.Player2Name
@@ -239,12 +265,14 @@ namespace JeuDePoints.Forms
             MessageBox.Show(
                 $"Partie terminée !\n\n{_state.Player1Name} : {_state.ScoreP1} point(s)\n{_state.Player2Name} : {_state.ScoreP2} point(s)\n\nVainqueur : {winner}",
                 "Fin de partie", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ReloadTimelineMoves(snapToLatest: true);
             RefreshAll();
+            UpdateReplayControls();
         }
 
         private void GoToPreviousSnapshot()
         {
-            if (!_isReplayMode || _snapshotRepo == null) return;
+            if (_snapshotRepo == null) return;
             if (_replayIndex <= 0) return;
 
             _replayIndex--;
@@ -253,7 +281,7 @@ namespace JeuDePoints.Forms
 
         private void GoToNextSnapshot()
         {
-            if (!_isReplayMode || _snapshotRepo == null) return;
+            if (_snapshotRepo == null) return;
             if (_replayIndex >= _replayMoveNumbers.Count - 1) return;
 
             _replayIndex++;
@@ -285,11 +313,54 @@ namespace JeuDePoints.Forms
 
         private void UpdateReplayControls()
         {
-            if (!_isReplayMode) return;
+            if (_snapshotRepo == null) return;
+
+            _isReadOnlyTimelineMode = !_canEditAtLatest || !IsAtLatestSnapshot();
+            SetInteractiveControlsEnabled(!_isReadOnlyTimelineMode);
 
             _btnPrev.Enabled = _replayIndex > 0;
             _btnNext.Enabled = _replayIndex >= 0 && _replayIndex < _replayMoveNumbers.Count - 1;
-            _lblReplay.Text = $"Replay: coup {_moveNumber} / {(_replayMoveNumbers.Count == 0 ? 0 : _replayMoveNumbers.Last())}";
+
+            string modeLabel = _isReadOnlyTimelineMode
+                ? "Lecture seule (ancien mouvement)"
+                : (_canEditAtLatest ? "Editable (dernier mouvement)" : "Replay");
+            _lblReplay.Text = $"Historique: coup {_moveNumber} / {(_replayMoveNumbers.Count == 0 ? 0 : _replayMoveNumbers.Last())} - {modeLabel}";
+
+            if (_canEditAtLatest)
+                Text = _isReadOnlyTimelineMode ? "Jeu de Points - Historique" : "Jeu de Points";
+            else
+                Text = "Jeu de Points - Replay";
+        }
+
+        private bool IsAtLatestSnapshot()
+        {
+            return _replayMoveNumbers.Count > 0 && _replayIndex == _replayMoveNumbers.Count - 1;
+        }
+
+        private void ReloadTimelineMoves(bool snapToLatest)
+        {
+            if (_snapshotRepo == null) return;
+
+            var moves = _snapshotRepo.GetSnapshotMoveNumbers(_state.GameId);
+            _replayMoveNumbers.Clear();
+            _replayMoveNumbers.AddRange(moves.OrderBy(x => x));
+
+            if (_replayMoveNumbers.Count == 0)
+            {
+                _replayIndex = -1;
+                return;
+            }
+
+            if (snapToLatest)
+            {
+                _replayIndex = _replayMoveNumbers.Count - 1;
+                _moveNumber = _replayMoveNumbers[_replayIndex];
+                return;
+            }
+
+            int idx = _replayMoveNumbers.FindIndex(x => x == _moveNumber);
+            _replayIndex = idx >= 0 ? idx : _replayMoveNumbers.Count - 1;
+            _moveNumber = _replayMoveNumbers[_replayIndex];
         }
     }
 }
