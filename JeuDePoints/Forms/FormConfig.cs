@@ -22,11 +22,32 @@ namespace JeuDePoints.Forms
 
         private readonly DatabaseConnection _db;
         private readonly GameRepository _gameRepo;
+        private readonly CannonRepository _cannonRepo;
+        private readonly PointRepository _pointRepo;
+        private readonly ValidatedLineRepository _lineRepo;
+        private readonly BlockedCellRepository _blockedRepo;
+        private readonly MoveRepository _moveRepo;
+        private readonly SnapshotRepository _snapshotRepo;
+        private readonly GameService _gameService;
 
         public FormConfig()
         {
             _db = new DatabaseConnection();
             _gameRepo = new GameRepository(_db);
+            _cannonRepo = new CannonRepository(_db);
+            _pointRepo = new PointRepository(_db);
+            _lineRepo = new ValidatedLineRepository(_db);
+            _blockedRepo = new BlockedCellRepository(_db);
+            _moveRepo = new MoveRepository(_db);
+            _snapshotRepo = new SnapshotRepository(_db);
+            _gameService = new GameService(
+                _gameRepo,
+                _cannonRepo,
+                _pointRepo,
+                _lineRepo,
+                _blockedRepo,
+                _moveRepo,
+                _snapshotRepo);
             InitializeComponents();
             LoadGamesList();
         }
@@ -176,10 +197,36 @@ namespace JeuDePoints.Forms
             if (_gridGames.Rows[e.RowIndex].DataBoundItem is not GameListRow row)
                 return;
 
-            // Pour l'instant: on confirme juste la récupération du game_id de la ligne.
+            if (string.Equals(row.Status, "finished", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    int latestMove;
+                    var state = _gameService.LoadLatestSnapshotState(row.GameId, out latestMove);
+                    var moves = _snapshotRepo.GetSnapshotMoveNumbers(row.GameId);
+
+                    var replayForm = new FormGame(
+                        state,
+                        _gameService,
+                        _snapshotRepo,
+                        moves,
+                        latestMove,
+                        true);
+
+                    replayForm.Show();
+                    Hide();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Replay impossible", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+
+                return;
+            }
+
             MessageBox.Show(
-                $"Action '{row.ActionLabel}' sur la partie #{row.GameId}",
-                "Action partie",
+                $"Continuer la partie #{row.GameId} (a brancher ensuite)",
+                "Information",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
         }
@@ -192,20 +239,14 @@ namespace JeuDePoints.Forms
                 return;
             }
 
-            var gameService = new GameService(
-                _gameRepo, new CannonRepository(_db),
-                new PointRepository(_db), new ValidatedLineRepository(_db),
-                new BlockedCellRepository(_db), new MoveRepository(_db),
-                new SnapshotRepository(_db));
-
-            var state = gameService.CreateNewGame(
+            var state = _gameService.CreateNewGame(
                 (int)_numRows.Value, (int)_numCols.Value,
                 _txtPlayer1.Text.Trim() == "" ? "Joueur 1" : _txtPlayer1.Text.Trim(),
                 _txtPlayer2.Text.Trim() == "" ? "Joueur 2" : _txtPlayer2.Text.Trim());
 
             LoadGamesList();
 
-            var formGame = new FormGame(state, gameService);
+            var formGame = new FormGame(state, _gameService);
             formGame.Show();
             Hide();
         }

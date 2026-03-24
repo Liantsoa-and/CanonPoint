@@ -6,6 +6,7 @@ using JeuDePoints.Controls;
 using SystemPoint = System.Drawing.Point;
 using JeuDePoints.Services;
 using JeuDePoints.Domain.Models;
+using JeuDePoints.Data.Repositories;
 
 namespace JeuDePoints.Forms
 {
@@ -21,14 +22,49 @@ namespace JeuDePoints.Forms
         private Button _btnEnd;
         private Button _btnUndo;
         private Button _btnReset;
+        private Button _btnPrev;
+        private Button _btnNext;
+        private Label _lblReplay;
         private int _moveNumber = 0;
+        private readonly bool _isReplayMode;
+        private readonly SnapshotRepository? _snapshotRepo;
+        private readonly List<int> _replayMoveNumbers;
+        private int _replayIndex = -1;
 
         public FormGame(GameState state, GameService gameService)
         {
             _state = state;
             _gameService = gameService;
+            _isReplayMode = false;
+            _replayMoveNumbers = new List<int>();
             InitializeComponents();
             RefreshAll();
+        }
+
+        public FormGame(
+            GameState state,
+            GameService gameService,
+            SnapshotRepository snapshotRepo,
+            List<int> replayMoveNumbers,
+            int initialMoveNumber,
+            bool isReplayMode)
+        {
+            _state = state;
+            _gameService = gameService;
+            _snapshotRepo = snapshotRepo;
+            _isReplayMode = isReplayMode;
+            _replayMoveNumbers = replayMoveNumbers.OrderBy(x => x).ToList();
+            _moveNumber = initialMoveNumber;
+            _replayIndex = _replayMoveNumbers.FindIndex(x => x == initialMoveNumber);
+            if (_replayIndex < 0 && _replayMoveNumbers.Count > 0)
+            {
+                _replayIndex = _replayMoveNumbers.Count - 1;
+                _moveNumber = _replayMoveNumbers[_replayIndex];
+            }
+
+            InitializeComponents();
+            RefreshAll();
+            UpdateReplayControls();
         }
 
         private void InitializeComponents()
@@ -47,10 +83,15 @@ namespace JeuDePoints.Forms
             _btnEnd = new Button { Text = "Terminer", Location = new SystemPoint(20, 10), Size = new Size(120, 30), BackColor = Color.DarkRed, ForeColor = Color.White };
             _btnUndo = new Button { Text = "Restaurer (Ctrl+Z)", Location = new SystemPoint(160, 10), Size = new Size(150, 30), BackColor = Color.DarkOrange, ForeColor = Color.White };
             _btnReset = new Button { Text = "Réinitialiser", Location = new SystemPoint(330, 10), Size = new Size(120, 30), BackColor = Color.DarkGreen, ForeColor = Color.White };
+            _btnPrev = new Button { Text = "Précédent", Location = new SystemPoint(470, 10), Size = new Size(120, 30), BackColor = Color.DimGray, ForeColor = Color.White, Visible = _isReplayMode };
+            _btnNext = new Button { Text = "Suivant", Location = new SystemPoint(600, 10), Size = new Size(120, 30), BackColor = Color.DimGray, ForeColor = Color.White, Visible = _isReplayMode };
+            _lblReplay = new Label { Text = "", Location = new SystemPoint(740, 14), Size = new Size(320, 22), ForeColor = Color.Gainsboro, Visible = _isReplayMode };
             _btnEnd.Click += (s, e) => EndGame();
             _btnUndo.Click += (s, e) => UndoMove();
             _btnReset.Click += (s, e) => ResetGame();
-            btnPanel.Controls.AddRange(new Control[] { _btnEnd, _btnUndo, _btnReset });
+            _btnPrev.Click += (s, e) => GoToPreviousSnapshot();
+            _btnNext.Click += (s, e) => GoToNextSnapshot();
+            btnPanel.Controls.AddRange(new Control[] { _btnEnd, _btnUndo, _btnReset, _btnPrev, _btnNext, _lblReplay });
             Controls.Add(btnPanel);
 
             // Canons (ajoutés AVANT le plateau — avec Dock, WinForms place
@@ -66,6 +107,16 @@ namespace JeuDePoints.Forms
             _boardPanel = new BoardPanel { Dock = DockStyle.Fill };
             _boardPanel.IntersectionClicked += OnIntersectionClicked;
             Controls.Add(_boardPanel);
+
+            if (_isReplayMode)
+            {
+                Text = "Jeu de Points - Replay";
+                _btnEnd.Enabled = false;
+                _btnUndo.Enabled = false;
+                _btnReset.Enabled = false;
+                _cannon1.Enabled = false;
+                _cannon2.Enabled = false;
+            }
         }
 
         private void RefreshAll()
@@ -78,6 +129,7 @@ namespace JeuDePoints.Forms
 
         private void OnIntersectionClicked(int row, int col)
         {
+            if (_isReplayMode) return;
             if (_state.IsFinished()) return;
             try
             {
@@ -93,12 +145,14 @@ namespace JeuDePoints.Forms
 
         private void OnCannonMoved(int playerId, Direction direction)
         {
+            if (_isReplayMode) return;
             _state = _gameService.MoveCannon(_state, playerId, direction);
             RefreshAll();
         }
 
         private void FormGame_KeyDown(object? sender, KeyEventArgs e)
         {
+            if (_isReplayMode) return;
             if (_state.IsFinished()) return;
             if (!e.Control) return;
 
@@ -150,6 +204,7 @@ namespace JeuDePoints.Forms
 
         private void UndoMove()
         {
+            if (_isReplayMode) return;
             try
             {
                 _state = _gameService.UndoLastMove(_state);
@@ -164,6 +219,7 @@ namespace JeuDePoints.Forms
 
         private void ResetGame()
         {
+            if (_isReplayMode) return;
             if (MessageBox.Show("Réinitialiser la partie ?", "Confirmation",
                 MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
@@ -175,6 +231,7 @@ namespace JeuDePoints.Forms
 
         private void EndGame()
         {
+            if (_isReplayMode) return;
             _state = _gameService.EndGame(_state);
             string winner = _state.ScoreP1 > _state.ScoreP2 ? _state.Player1Name
                 : _state.ScoreP2 > _state.ScoreP1 ? _state.Player2Name
@@ -183,6 +240,56 @@ namespace JeuDePoints.Forms
                 $"Partie terminée !\n\n{_state.Player1Name} : {_state.ScoreP1} point(s)\n{_state.Player2Name} : {_state.ScoreP2} point(s)\n\nVainqueur : {winner}",
                 "Fin de partie", MessageBoxButtons.OK, MessageBoxIcon.Information);
             RefreshAll();
+        }
+
+        private void GoToPreviousSnapshot()
+        {
+            if (!_isReplayMode || _snapshotRepo == null) return;
+            if (_replayIndex <= 0) return;
+
+            _replayIndex--;
+            LoadSnapshotByIndex();
+        }
+
+        private void GoToNextSnapshot()
+        {
+            if (!_isReplayMode || _snapshotRepo == null) return;
+            if (_replayIndex >= _replayMoveNumbers.Count - 1) return;
+
+            _replayIndex++;
+            LoadSnapshotByIndex();
+        }
+
+        private void LoadSnapshotByIndex()
+        {
+            if (_snapshotRepo == null) return;
+            if (_replayIndex < 0 || _replayIndex >= _replayMoveNumbers.Count) return;
+
+            int moveNumber = _replayMoveNumbers[_replayIndex];
+            var snapshot = _snapshotRepo.GetSnapshot(_state.GameId, moveNumber);
+            if (snapshot == null) return;
+
+            var replayState = snapshot.ToGameState();
+            replayState.GameId = _state.GameId;
+            replayState.Rows = _state.Rows;
+            replayState.Columns = _state.Columns;
+            replayState.Player1Name = _state.Player1Name;
+            replayState.Player2Name = _state.Player2Name;
+            replayState.Status = _state.Status;
+
+            _state = replayState;
+            _moveNumber = moveNumber;
+            RefreshAll();
+            UpdateReplayControls();
+        }
+
+        private void UpdateReplayControls()
+        {
+            if (!_isReplayMode) return;
+
+            _btnPrev.Enabled = _replayIndex > 0;
+            _btnNext.Enabled = _replayIndex >= 0 && _replayIndex < _replayMoveNumbers.Count - 1;
+            _lblReplay.Text = $"Replay: coup {_moveNumber} / {(_replayMoveNumbers.Count == 0 ? 0 : _replayMoveNumbers.Last())}";
         }
     }
 }

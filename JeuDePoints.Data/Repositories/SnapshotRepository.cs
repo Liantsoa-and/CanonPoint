@@ -55,6 +55,15 @@ namespace JeuDePoints.Data.Repositories
             };
         }
 
+        public List<int> GetSnapshotMoveNumbers(int gameId)
+        {
+            using var conn = _db.GetConnection();
+            conn.Open();
+            return conn.Query<int>(@"SELECT move_number FROM game_snapshots
+                WHERE game_id = @gameId ORDER BY move_number",
+                new { gameId }).ToList();
+        }
+
         public void DeleteSnapshot(int gameId, int moveNumber)
         {
             using var conn = _db.GetConnection();

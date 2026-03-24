@@ -265,5 +265,26 @@ namespace JeuDePoints.Services
 
             return state;
         }
+
+        public GameState LoadLatestSnapshotState(int gameId, out int moveNumber)
+        {
+            var game = _gameRepo.GetGameById(gameId)
+                ?? throw new InvalidOperationException("Partie introuvable.");
+
+            var latest = _snapshotRepo.GetLatestSnapshot(gameId)
+                ?? throw new InvalidOperationException("Aucun snapshot disponible pour cette partie.");
+
+            moveNumber = latest.MoveNumber;
+
+            var state = latest.ToGameState();
+            state.GameId = game.GameId;
+            state.Rows = game.Rows;
+            state.Columns = game.Columns;
+            state.Player1Name = game.Player1Name;
+            state.Player2Name = game.Player2Name;
+            state.Status = game.Status;
+
+            return state;
+        }
     }
 }
