@@ -1,0 +1,455 @@
+================================================================================
+  TODO LIST — Jeu de Points à Deux Joueurs (C# / PostgreSQL)
+  Légende : [ ] = à faire   [x] = terminé
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÉTAPE 1 — MISE EN PLACE DU PROJET ET DE LA BASE DE DONNÉES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] 1.1  Créer la solution Visual Studio
+         - Projet principal : JeuDePoints (WinForms ou WPF)
+         - Projet bibliothèque : JeuDePoints.Domain
+         - Projet bibliothèque : JeuDePoints.Services
+         - Projet bibliothèque : JeuDePoints.Data
+         - Projet de tests : JeuDePoints.Tests (xUnit ou NUnit)
+
+[ ] 1.2  Installer les packages NuGet
+         - Npgsql (driver PostgreSQL)
+         - Dapper (micro-ORM léger)
+         - Newtonsoft.Json ou System.Text.Json (sérialisation des snapshots)
+         - xUnit + FluentAssertions (tests)
+
+[ ] 1.3  Exécuter le script schema.sql sur PostgreSQL
+         - Créer la base de données : jeu_de_points
+         - Vérifier la création des 6 tables : games, cannons, points,
+           validated_lines, blocked_cells, moves, game_snapshots
+         - Vérifier le trigger trg_games_updated_at
+         - Vérifier les vues v_active_points et v_game_status
+         - Vérifier la fonction fn_calculate_target_col
+
+[ ] 1.4  Créer la classe DatabaseConnection
+         Fichier : JeuDePoints.Data/DatabaseConnection.cs
+         - Méthode : GetConnection() → NpgsqlConnection
+         - Lire la chaîne de connexion depuis appsettings.json ou App.config
+         - Méthode : TestConnection() → bool (ping pour vérifier la connexion)
+
+         Tests :
+         [ ] TestConnection() retourne true si la base est accessible
+         [ ] TestConnection() retourne false si la base est inaccessible
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÉTAPE 2 — COUCHE DOMAINE (MODÈLES MÉTIER)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] 2.1  Créer la classe Point
+         Fichier : JeuDePoints.Domain/Models/Point.cs
+         - Propriétés : Id, GameId, PlayerId (1 ou 2), Row, Col, IsActive
+         - Méthode : IsOwnedBy(int playerId) → bool
+
+         Tests :
+         [ ] IsOwnedBy retourne true pour le bon joueur
+         [ ] IsOwnedBy retourne false pour le joueur adverse
+
+[ ] 2.2  Créer la classe Cannon
+         Fichier : JeuDePoints.Domain/Models/Cannon.cs
+         - Propriétés : Id, GameId, PlayerId, RowPosition
+         - Méthode : MoveUp() → décrémente RowPosition (min 0)
+         - Méthode : MoveDown(int maxRow) → incrémente RowPosition (max maxRow)
+
+         Tests :
+         [ ] MoveUp() ne descend pas en dessous de 0
+         [ ] MoveDown() ne dépasse pas maxRow
+         [ ] MoveUp() / MoveDown() modifient correctement RowPosition
+
+[ ] 2.3  Créer la classe ValidatedLine
+         Fichier : JeuDePoints.Domain/Models/ValidatedLine.cs
+         - Propriétés : Id, GameId, PlayerId, Direction, StartRow, StartCol,
+                        EndRow, EndCol, CreatedAt
+         - Méthode : GetCells() → IEnumerable<(int row, int col)>
+           (retourne les 5 intersections de la ligne)
+
+         Tests :
+         [ ] GetCells() retourne exactement 5 cellules
+         [ ] GetCells() retourne les bonnes coordonnées pour chaque direction
+             (horizontal, vertical, diagonal_asc, diagonal_desc)
+
+[ ] 2.4  Créer la classe BlockedCell
+         Fichier : JeuDePoints.Domain/Models/BlockedCell.cs
+         - Propriétés : Id, GameId, ValidatedLineId, Row, Col, BlockingPlayerId
+
+[ ] 2.5  Créer la classe GameState
+         Fichier : JeuDePoints.Domain/Models/GameState.cs
+         - Propriétés : GameId, Rows, Columns, Player1Name, Player2Name,
+                        CurrentTurn, ScoreP1, ScoreP2, Status
+         - Propriété : Points → List<Point>
+         - Propriété : Cannons → Dictionary<int, Cannon>
+         - Propriété : ValidatedLines → List<ValidatedLine>
+         - Propriété : BlockedCells → List<BlockedCell>
+         - Méthode : IsFinished() → bool (status == "finished")
+         - Méthode : GetCurrentPlayerName() → string
+
+         Tests :
+         [ ] IsFinished() retourne true uniquement si status == "finished"
+         [ ] GetCurrentPlayerName() retourne le bon nom selon CurrentTurn
+
+[ ] 2.6  Créer la classe GameSnapshot
+         Fichier : JeuDePoints.Domain/Models/GameSnapshot.cs
+         - Propriétés : Id, GameId, MoveNumber, SnapshotData (string JSON)
+         - Méthode statique : FromGameState(GameState state) → GameSnapshot
+           (sérialise l'état complet en JSON selon la structure définie)
+         - Méthode : ToGameState() → GameState
+           (désérialise le JSON en GameState)
+
+         Tests :
+         [ ] FromGameState() produit un JSON valide
+         [ ] ToGameState(FromGameState(state)) reconstitue l'état d'origine
+         [ ] Le JSON contient bien : current_turn, scores, cannons, points,
+             validated_lines, blocked_cells
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÉTAPE 3 — COUCHE ACCÈS AUX DONNÉES (REPOSITORIES)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] 3.1  Créer GameRepository
+         Fichier : JeuDePoints.Data/Repositories/GameRepository.cs
+         - Méthode : CreateGame(int rows, int cols, string p1, string p2) → int (gameId)
+         - Méthode : GetGameById(int gameId) → GameState
+         - Méthode : UpdateTurn(int gameId, int newTurn) → void
+         - Méthode : UpdateScores(int gameId, int scoreP1, int scoreP2) → void
+         - Méthode : SetStatus(int gameId, string status) → void
+         - Méthode : DeleteGame(int gameId) → void (cascade)
+
+         Tests :
+         [ ] CreateGame() insère bien une ligne dans games et retourne un id > 0
+         [ ] GetGameById() retourne null si l'id n'existe pas
+         [ ] UpdateTurn() bascule correctement entre 1 et 2
+         [ ] DeleteGame() supprime la partie et toutes les données liées (cascade)
+
+[ ] 3.2  Créer CannonRepository
+         Fichier : JeuDePoints.Data/Repositories/CannonRepository.cs
+         - Méthode : InitCannons(int gameId) → void
+           (crée 2 enregistrements, row_position = 0)
+         - Méthode : GetCannon(int gameId, int playerId) → Cannon
+         - Méthode : UpdatePosition(int gameId, int playerId, int newRow) → void
+
+         Tests :
+         [ ] InitCannons() crée exactement 2 enregistrements
+         [ ] UpdatePosition() modifie uniquement le canon du bon joueur
+
+[ ] 3.3  Créer PointRepository
+         Fichier : JeuDePoints.Data/Repositories/PointRepository.cs
+         - Méthode : AddPoint(int gameId, int playerId, int row, int col) → int (pointId)
+         - Méthode : GetActivePoints(int gameId) → List<Point>
+         - Méthode : GetActivePointsByPlayer(int gameId, int playerId) → List<Point>
+         - Méthode : DeactivatePoint(int gameId, int row, int col) → bool (hit)
+         - Méthode : IsCellOccupied(int gameId, int row, int col) → bool
+
+         Tests :
+         [ ] AddPoint() lève une exception si la cellule est déjà occupée
+         [ ] DeactivatePoint() retourne false si aucun point actif à cet emplacement
+         [ ] GetActivePoints() n'inclut pas les points détruits (is_active = false)
+         [ ] IsCellOccupied() retourne true même pour un point inactif
+
+[ ] 3.4  Créer ValidatedLineRepository
+         Fichier : JeuDePoints.Data/Repositories/ValidatedLineRepository.cs
+         - Méthode : AddValidatedLine(ValidatedLine line) → int (lineId)
+         - Méthode : GetValidatedLines(int gameId) → List<ValidatedLine>
+         - Méthode : LineAlreadyExists(int gameId, int playerId,
+                      string direction, int startRow, int startCol) → bool
+
+         Tests :
+         [ ] AddValidatedLine() insère correctement tous les champs
+         [ ] LineAlreadyExists() retourne true pour un doublon exact
+         [ ] LineAlreadyExists() retourne false si direction différente
+
+[ ] 3.5  Créer BlockedCellRepository
+         Fichier : JeuDePoints.Data/Repositories/BlockedCellRepository.cs
+         - Méthode : AddBlockedCells(int gameId, int lineId,
+                      IEnumerable<(int row, int col)> cells,
+                      int blockingPlayerId) → void
+         - Méthode : IsCellBlocked(int gameId, int row, int col,
+                      int forPlayerId) → bool
+           (retourne true si la cellule est bloquée par l'adversaire de forPlayerId)
+         - Méthode : GetBlockedCells(int gameId) → List<BlockedCell>
+
+         Tests :
+         [ ] AddBlockedCells() insère exactement 5 cellules par ligne
+         [ ] IsCellBlocked() retourne false si la cellule appartient au joueur actif
+         [ ] IsCellBlocked() retourne true si bloquée par l'adversaire
+
+[ ] 3.6  Créer MoveRepository
+         Fichier : JeuDePoints.Data/Repositories/MoveRepository.cs
+         - Méthode : AddMove(Move move) → int (moveId)
+         - Méthode : GetLastMoveNumber(int gameId) → int
+         - Méthode : DeleteMove(int gameId, int moveNumber) → void
+         - Méthode : GetMoveHistory(int gameId) → List<Move>
+
+         Tests :
+         [ ] AddMove() incrémente correctement move_number
+         [ ] DeleteMove() supprime uniquement le mouvement ciblé
+         [ ] GetLastMoveNumber() retourne 0 si aucun mouvement
+
+[ ] 3.7  Créer SnapshotRepository
+         Fichier : JeuDePoints.Data/Repositories/SnapshotRepository.cs
+         - Méthode : SaveSnapshot(int gameId, int moveNumber,
+                      GameSnapshot snapshot) → void
+         - Méthode : GetSnapshot(int gameId, int moveNumber) → GameSnapshot
+         - Méthode : GetLatestSnapshot(int gameId) → GameSnapshot
+         - Méthode : DeleteSnapshot(int gameId, int moveNumber) → void
+
+         Tests :
+         [ ] SaveSnapshot() sérialise et stocke le JSON correctement
+         [ ] GetSnapshot() retourne null si moveNumber n'existe pas
+         [ ] GetLatestSnapshot() retourne le snapshot avec le plus grand moveNumber
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÉTAPE 4 — COUCHE SERVICES (LOGIQUE MÉTIER)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] 4.1  Créer AlignmentChecker
+         Fichier : JeuDePoints.Services/AlignmentChecker.cs
+         - Méthode : CheckAlignments(GameState state, int lastRow, int lastCol,
+                      int playerId) → List<ValidatedLine>
+           (vérifie les 4 directions à partir de la dernière pose)
+         - Méthode privée : CheckDirection(List<Point> points, int row, int col,
+                      int playerId, int dRow, int dCol,
+                      int maxRow, int maxCol) → ValidatedLine?
+           (cherche 5 consécutifs dans une direction)
+         - Méthode : IsNewLine(ValidatedLine line,
+                      List<ValidatedLine> existing) → bool
+
+         Tests :
+         [ ] CheckAlignments() retourne une ligne sur 5 points horizontaux
+         [ ] CheckAlignments() retourne une ligne sur 5 points verticaux
+         [ ] CheckAlignments() retourne une ligne sur 5 points diagonaux (asc)
+         [ ] CheckAlignments() retourne une ligne sur 5 points diagonaux (desc)
+         [ ] CheckAlignments() retourne liste vide si moins de 5 alignés
+         [ ] IsNewLine() retourne false si la même ligne existe déjà
+         [ ] Un alignement de 6 points produit bien 2 lignes distinctes
+
+[ ] 4.2  Créer CannonService
+         Fichier : JeuDePoints.Services/CannonService.cs
+         - Méthode : CalculateTargetCol(int power, int columns) → int
+           (implémente : FLOOR(power * columns / 9))
+         - Méthode : ResolveShot(GameState state, int playerId,
+                      int power) → ShotResult
+           (vérifie la trajectoire, détecte les lignes bloquantes,
+            retourne la cellule impactée et si hit)
+         - Méthode privée : GetTrajectory(int cannonRow, int targetCol,
+                      int playerId) → List<(int row, int col)>
+           (retourne toutes les cellules entre le canon et la cible)
+         - Méthode privée : IsBlockedByLine(GameState state,
+                      int row, int col) → bool
+
+         Tests :
+         [ ] CalculateTargetCol(1, 30) == 3
+         [ ] CalculateTargetCol(5, 30) == 16
+         [ ] CalculateTargetCol(9, 30) == 30
+         [ ] CalculateTargetCol(0, 30) lève ArgumentException (puissance < 1)
+         [ ] CalculateTargetCol(10, 30) lève ArgumentException (puissance > 9)
+         [ ] ResolveShot() s'arrête avant une ligne validée sur la trajectoire
+         [ ] ResolveShot() retourne hit = true si point adverse actif à la cible
+         [ ] ResolveShot() retourne hit = false si cellule cible vide
+         [ ] ResolveShot() est invalide si la cible est protégée par une ligne
+
+[ ] 4.3  Créer TurnManager
+         Fichier : JeuDePoints.Services/TurnManager.cs
+         - Méthode : ValidatePlacement(GameState state, int row, int col,
+                      int playerId) → ValidationResult
+           (vérifie : cellule libre, non bloquée par l'adversaire)
+         - Méthode : ValidateShot(GameState state, int playerId,
+                      int power) → ValidationResult
+           (vérifie : puissance entre 1 et 9, tir résolvable)
+         - Méthode : NextTurn(int currentTurn) → int (1 → 2, 2 → 1)
+
+         Tests :
+         [ ] ValidatePlacement() échoue si cellule occupée
+         [ ] ValidatePlacement() échoue si cellule bloquée par l'adversaire
+         [ ] ValidatePlacement() réussit si cellule couverte par sa propre ligne
+         [ ] ValidateShot() échoue si puissance hors [1..9]
+         [ ] NextTurn(1) == 2 et NextTurn(2) == 1
+
+[ ] 4.4  Créer GameService (orchestrateur principal)
+         Fichier : JeuDePoints.Services/GameService.cs
+         - Méthode : CreateNewGame(int rows, int cols,
+                      string p1, string p2) → GameState
+         - Méthode : PlacePoint(GameState state, int row,
+                      int col) → GameState
+           (valide, insère, vérifie alignements, sauvegarde snapshot,
+            passe le tour — tout dans une transaction)
+         - Méthode : ShootCannon(GameState state, int power) → GameState
+           (valide, calcule cible, résout le tir, met à jour,
+            sauvegarde snapshot, passe le tour — tout dans une transaction)
+         - Méthode : MoveCannon(GameState state, int playerId,
+                      Direction direction) → GameState
+         - Méthode : UndoLastMove(GameState state) → GameState
+           (récupère snapshot N-1, supprime move N, restaure l'état)
+         - Méthode : ResetGame(GameState state) → GameState
+           (supprime la partie, recrée avec même config)
+         - Méthode : EndGame(GameState state) → GameState
+
+         Tests :
+         [ ] PlacePoint() change CurrentTurn après succès
+         [ ] PlacePoint() incrémente le score si alignement validé
+         [ ] PlacePoint() lève InvalidOperationException si cellule invalide
+         [ ] ShootCannon() désactive le point adverse si hit == true
+         [ ] UndoLastMove() restaure l'état du snapshot précédent
+         [ ] UndoLastMove() lève InvalidOperationException si aucun mouvement
+         [ ] ResetGame() crée une nouvelle partie avec les mêmes dimensions
+         [ ] Toute action (place/shoot) crée un snapshot avec moveNumber croissant
+         [ ] Toute action est atomique (rollback si erreur en cours de transaction)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÉTAPE 5 — COUCHE PRÉSENTATION (INTERFACE UTILISATEUR)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] 5.1  Créer l'écran de configuration (FormConfig)
+         Fichier : JeuDePoints/Forms/FormConfig.cs
+         - Champ numérique : Nombre de lignes (min 10)
+         - Champ numérique : Nombre de colonnes (min 10)
+         - Champs texte : Nom Joueur 1, Nom Joueur 2
+         - Bouton : Démarrer la partie
+         - Validation : afficher message d'erreur si valeurs invalides
+
+         Tests manuels :
+         [ ] Impossible de lancer avec lignes < 10 ou colonnes < 10
+         [ ] Les noms par défaut sont "Joueur 1" et "Joueur 2"
+
+[ ] 5.2  Créer le composant BoardPanel (plateau de jeu)
+         Fichier : JeuDePoints/Controls/BoardPanel.cs
+         - Méthode : DrawGrid(Graphics g) → void
+           (trace les lignes de la grille)
+         - Méthode : DrawPoints(Graphics g, List<Point> points) → void
+           (cercles bleus = J1, rouges = J2)
+         - Méthode : DrawValidatedLines(Graphics g,
+                      List<ValidatedLine> lines) → void
+           (segments colorés sur les 5 intersections)
+         - Méthode : DrawBlockedCells(Graphics g,
+                      List<BlockedCell> cells) → void
+           (grisage des intersections bloquées)
+         - Méthode : HighlightRow(Graphics g, int row) → void
+           (surbrillance de la ligne visée par le canon actif)
+         - Événement : OnIntersectionClicked(int row, int col)
+           (clic sur une intersection → déclenche PlacePoint)
+         - Méthode : ScreenToGrid(Point screenPos) → (int row, int col)
+           (convertit coordonnées écran en coordonnées grille)
+
+[ ] 5.3  Créer le widget Canon (CannonWidget)
+         Fichier : JeuDePoints/Controls/CannonWidget.cs
+         - Affiche la position courante du canon
+         - Boutons ▲ / ▼ pour déplacer le canon
+         - Méthode : UpdatePosition(int row) → void
+
+[ ] 5.4  Créer le panneau de score (ScorePanel)
+         Fichier : JeuDePoints/Controls/ScorePanel.cs
+         - Affiche : Score J1, Score J2, Joueur actif, Numéro du mouvement
+         - Méthode : Refresh(GameState state) → void
+
+[ ] 5.5  Créer la fenêtre principale (FormGame)
+         Fichier : JeuDePoints/Forms/FormGame.cs
+         - Intègre : BoardPanel, CannonWidget ×2, ScorePanel
+         - Barre de boutons : Terminer, Restaurer (Ctrl+Z), Réinitialiser
+         - Gestion clavier : Ctrl+1 à Ctrl+9 (touches du rang supérieur uniquement)
+           pour déclencher ShootCannon avec la puissance correspondante
+         - Méthode : RefreshAll(GameState state) → void
+           (met à jour tous les composants visuels en une passe)
+         - Méthode : ShowShotAnimation(ShotResult result) → Task
+           (anime le projectile du canon jusqu'à la cible)
+         - Méthode : ShowEndGameDialog(GameState state) → void
+           (affiche le score final et le vainqueur)
+
+         Tests manuels :
+         [ ] Ctrl+Pavé numérique ne déclenche PAS le tir
+         [ ] Ctrl+1 (rang supérieur) déclenche bien un tir de puissance 1
+         [ ] Ctrl+Z déclenche bien UndoLastMove
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÉTAPE 6 — ANIMATION DU PROJECTILE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] 6.1  Créer ShotAnimator
+         Fichier : JeuDePoints/Animation/ShotAnimator.cs
+         - Méthode : AnimateShot(BoardPanel board, ShotResult result,
+                      int playerId) → Task
+           (anime le projectile sur la trajectoire calculée)
+         - Méthode privée : GetAnimationPath(int cannonRow,
+                      int targetRow, int targetCol,
+                      int playerId) → List<PointF>
+           (calcule les points de la trajectoire en coordonnées écran)
+         - Paramètres configurables : durée totale, pas d'animation
+
+         Tests manuels :
+         [ ] Le projectile part bien du bord gauche (J1) ou droit (J2)
+         [ ] Le projectile s'arrête avant une ligne bloquante
+         [ ] L'animation se termine avant que l'état du jeu ne soit mis à jour
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÉTAPE 7 — TESTS D'INTÉGRATION ET SCÉNARIOS DE JEU
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] 7.1  Tests d'intégration de la persistance
+         [ ] Créer une partie, jouer 5 coups, vérifier que les snapshots
+             sont bien créés et numérotés de 0 à 5
+         [ ] Restaurer le coup 3 : vérifier que l'état correspond
+             exactement au snapshot 3
+         [ ] Réinitialiser : vérifier que la nouvelle partie a le même
+             rows/columns que l'originale
+
+[ ] 7.2  Scénario : blocage par une ligne validée
+         [ ] J1 réalise un alignement horizontal de 5
+         [ ] J2 tente de poser sur une de ces 5 cellules → refus
+         [ ] J1 peut poser sur sa propre ligne → accepté
+         [ ] J2 tire sur un point de J1 sur cette ligne → tir invalide (protégé)
+
+[ ] 7.3  Scénario : trajectoire du canon bloquée
+         [ ] Une ligne validée est présente en col 10 sur la ligne 5
+         [ ] J2 tire en puissance ciblant la col 15 sur la ligne 5
+         [ ] Le projectile s'arrête avant la col 10
+         [ ] Aucun point n'est détruit au-delà de la ligne bloquante
+
+[ ] 7.4  Scénario : fin de partie
+         [ ] Cliquer "Terminer" → le statut passe à "finished"
+         [ ] Le score final est affiché avec le nom du vainqueur
+         [ ] Aucune action n'est possible après la fin de partie
+
+[ ] 7.5  Tests de performance
+         [ ] Plateau 50×50 : PlacePoint() s'exécute en moins de 200 ms
+         [ ] Chargement d'un snapshot avec 500 points en moins de 300 ms
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÉTAPE 8 — POLISH ET LIVRAISON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] 8.1  Gestion des erreurs utilisateur
+         [ ] Afficher un message clair si la connexion DB échoue au démarrage
+         [ ] Afficher un message si l'action est invalide (cellule bloquée, etc.)
+         [ ] Empêcher tout double-clic ou action pendant une animation en cours
+
+[ ] 8.2  Accessibilité et UX
+         [ ] Afficher un tooltip sur chaque intersection au survol
+             (occupée par qui, bloquée ou libre)
+         [ ] Mettre en surbrillance la ligne visée par le canon actif
+         [ ] Différencier visuellement les cellules bloquées des cellules libres
+
+[ ] 8.3  Documentation
+         [ ] README.md : prérequis, installation, lancement
+         [ ] Commenter les méthodes complexes (AlignmentChecker, CannonService)
+         [ ] Documenter la structure JSON de game_snapshots
+
+[ ] 8.4  Revue finale
+         [ ] Tous les tests unitaires passent (0 échec)
+         [ ] Tous les tests d'intégration passent
+         [ ] Revue de code : pas de logique métier dans la couche Présentation
+         [ ] Vérifier que toutes les actions BD sont dans des transactions
+
+================================================================================
+  FIN DU TODO LIST — Jeu de Points à Deux Joueurs
+================================================================================
+
+
+- ne pas suprimmer le move N ni le snapshot N, restaurer via snapshot N-1
+- faire le move passe
+- je ne comprends pas ce qui se passe avec le line_key
+- on garde le code en net9.0
+- on garde le code actuel avec is_active

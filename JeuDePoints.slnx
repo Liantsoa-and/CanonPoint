@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="JeuDePoints.Data/JeuDePoints.Data.csproj" />
+  <Project Path="JeuDePoints.Domain/JeuDePoints.Domain.csproj" />
+  <Project Path="JeuDePoints.Services/JeuDePoints.Services.csproj" />
+  <Project Path="JeuDePoints.Tests/JeuDePoints.Tests.csproj" />
+  <Project Path="JeuDePoints/JeuDePoints.csproj" />
+</Solution>
