@@ -109,6 +109,8 @@ namespace JeuDePoints.Forms
                 MultiSelect = false
             };
 
+            _gridGames.CellContentClick += GridGames_CellContentClick;
+
             _gridGames.Columns.Add(new DataGridViewTextBoxColumn
             {
                 DataPropertyName = "GameId",
@@ -130,6 +132,22 @@ namespace JeuDePoints.Forms
                 Width = 120
             });
 
+            _gridGames.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                DataPropertyName = "Status",
+                HeaderText = "Statut",
+                Width = 110
+            });
+
+            _gridGames.Columns.Add(new DataGridViewButtonColumn
+            {
+                DataPropertyName = "ActionLabel",
+                HeaderText = "Action",
+                Width = 110,
+                UseColumnTextForButtonValue = false,
+                Name = "ActionColumn"
+            });
+
             layout.Controls.Add(_gridGames, 0, 7);
             layout.SetColumnSpan(_gridGames, 2);
 
@@ -148,6 +166,22 @@ namespace JeuDePoints.Forms
             {
                 _lblError.Text = "Impossible de charger les parties: " + ex.Message;
             }
+        }
+
+        private void GridGames_CellContentClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+            if (_gridGames.Columns[e.ColumnIndex].Name != "ActionColumn") return;
+
+            if (_gridGames.Rows[e.RowIndex].DataBoundItem is not GameListRow row)
+                return;
+
+            // Pour l'instant: on confirme juste la récupération du game_id de la ligne.
+            MessageBox.Show(
+                $"Action '{row.ActionLabel}' sur la partie #{row.GameId}",
+                "Action partie",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
         }
 
         private void BtnStart_Click(object? sender, EventArgs e)

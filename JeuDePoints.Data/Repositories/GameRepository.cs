@@ -13,6 +13,8 @@ namespace JeuDePoints.Data.Repositories
         public int GameId { get; set; }
         public string GameName { get; set; } = "";
         public string Score { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string ActionLabel { get; set; } = "";
     }
 
     public class GameRepository
@@ -94,7 +96,9 @@ namespace JeuDePoints.Data.Repositories
             var sql = @"SELECT
                             id AS GameId,
                             (player1_name || ' vs ' || player2_name) AS GameName,
-                            (score_p1::text || ' - ' || score_p2::text) AS Score
+                            (score_p1::text || ' - ' || score_p2::text) AS Score,
+                            status AS Status,
+                            CASE WHEN status = 'finished' THEN 'Replay' ELSE 'Continuer' END AS ActionLabel
                         FROM games
                         ORDER BY updated_at DESC, id DESC";
 
