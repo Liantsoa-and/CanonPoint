@@ -58,34 +58,49 @@ namespace JeuDePoints.Services
 
             if (count < 5) return null;
 
-            var candidate = new ValidatedLine
-            {
-                PlayerId = playerId,
-                Direction = dir,
-                StartRow = startRow,
-                StartCol = startCol,
-                EndRow = startRow + 4 * dRow,
-                EndCol = startCol + 4 * dCol
-            };
-
-            // Regle: rejeter la ligne si une de ses 5 cases est protegee par l'adversaire.
-            bool blockedByOpponent = candidate.GetCells().Any(cell =>
-                blockedCells.Any(b =>
-                    b.Row == cell.row &&
-                    b.Col == cell.col &&
-                    b.BlockingPlayerId != playerId));
-
-            if (blockedByOpponent) return null;
-
-            // Regle: rejeter la ligne si elle croise une ligne validee adverse,
-            // meme sans case commune (croisement geometrique des segments).
             int adversaire = playerId == 1 ? 2 : 1;
-            bool crossesOpponentLine = validatedLines.Any(vline =>
-                vline.PlayerId == adversaire &&
-                SegmentsIntersect(candidate.StartCol, candidate.StartRow, candidate.EndCol, candidate.EndRow,
-                    vline.StartCol, vline.StartRow, vline.EndCol, vline.EndRow));
 
-            return crossesOpponentLine ? null : candidate;
+            // Une sequence > 5 peut contenir plusieurs lignes de 5.
+            // On garde la premiere fenetre valide qui inclut le dernier point joue.
+            for (int offset = 0; offset <= count - 5; offset++)
+            {
+                var candidate = new ValidatedLine
+                {
+                    PlayerId = playerId,
+                    Direction = dir,
+                    StartRow = startRow + offset * dRow,
+                    StartCol = startCol + offset * dCol,
+                    EndRow = startRow + (offset + 4) * dRow,
+                    EndCol = startCol + (offset + 4) * dCol
+                };
+
+                var candidateCells = candidate.GetCells().ToList();
+
+                // La ligne detectee doit etre celle creee par le coup courant.
+                if (!candidateCells.Contains((row, col)))
+                    continue;
+
+                bool blockedByOpponent = candidateCells.Any(cell =>
+                    blockedCells.Any(b =>
+                        b.Row == cell.row &&
+                        b.Col == cell.col &&
+                        b.BlockingPlayerId != playerId));
+
+                if (blockedByOpponent)
+                    continue;
+
+                bool crossesOpponentLine = validatedLines.Any(vline =>
+                    vline.PlayerId == adversaire &&
+                    SegmentsIntersect(candidate.StartCol, candidate.StartRow, candidate.EndCol, candidate.EndRow,
+                        vline.StartCol, vline.StartRow, vline.EndCol, vline.EndRow));
+
+                if (crossesOpponentLine)
+                    continue;
+
+                return candidate;
+            }
+
+            return null;
         }
 
         private static bool SegmentsIntersect(int ax, int ay, int bx, int by,
