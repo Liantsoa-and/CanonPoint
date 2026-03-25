@@ -7,6 +7,7 @@ using SystemPoint = System.Drawing.Point;
 using JeuDePoints.Services;
 using JeuDePoints.Domain.Models;
 using JeuDePoints.Data.Repositories;
+using JeuDePoints.Ui;
 
 namespace JeuDePoints.Forms
 {
@@ -77,43 +78,114 @@ namespace JeuDePoints.Forms
         private void InitializeComponents()
         {
             Text = "Jeu de Points";
-            Size = new Size(1100, 750);
+            Size = new Size(1220, 820);
+            MinimumSize = new Size(1020, 700);
             StartPosition = FormStartPosition.CenterScreen;
+            BackColor = GameTheme.WindowBackground;
             KeyPreview = true;
             KeyDown += FormGame_KeyDown;
 
-            _scorePanel = new ScorePanel();
-            Controls.Add(_scorePanel);
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                BackColor = Color.Transparent,
+                Padding = new Padding(10)
+            };
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
 
-            // Barre de boutons
-            var btnPanel = new Panel { Dock = DockStyle.Bottom, Height = 50, BackColor = Color.FromArgb(45, 45, 45) };
-            _btnEnd = new Button { Text = "Terminer", Location = new SystemPoint(20, 10), Size = new Size(120, 30), BackColor = Color.DarkRed, ForeColor = Color.White };
-            _btnUndo = new Button { Text = "Restaurer (Ctrl+Z)", Location = new SystemPoint(160, 10), Size = new Size(150, 30), BackColor = Color.DarkOrange, ForeColor = Color.White };
-            _btnReset = new Button { Text = "Réinitialiser", Location = new SystemPoint(330, 10), Size = new Size(120, 30), BackColor = Color.DarkGreen, ForeColor = Color.White };
-            _btnPrev = new Button { Text = "Précédent", Location = new SystemPoint(470, 10), Size = new Size(120, 30), BackColor = Color.DimGray, ForeColor = Color.White, Visible = _snapshotRepo != null };
-            _btnNext = new Button { Text = "Suivant", Location = new SystemPoint(600, 10), Size = new Size(120, 30), BackColor = Color.DimGray, ForeColor = Color.White, Visible = _snapshotRepo != null };
-            _lblReplay = new Label { Text = "", Location = new SystemPoint(730, 14), Size = new Size(360, 22), ForeColor = Color.Gainsboro, Visible = _snapshotRepo != null };
+            var scoreHost = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(6, 4, 6, 8),
+                BackColor = Color.Transparent
+            };
+            _scorePanel = new ScorePanel { Dock = DockStyle.Fill };
+            scoreHost.Controls.Add(_scorePanel);
+            root.Controls.Add(scoreHost, 0, 0);
+
+            var gameArea = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 1,
+                BackColor = Color.Transparent
+            };
+            gameArea.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+            gameArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            gameArea.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+
+            _cannon1 = new CannonWidget(1) { Dock = DockStyle.Fill, Margin = new Padding(8, 8, 8, 8) };
+            _cannon2 = new CannonWidget(2) { Dock = DockStyle.Fill, Margin = new Padding(8, 8, 8, 8) };
+            _cannon1.CannonMoved += OnCannonMoved;
+            _cannon2.CannonMoved += OnCannonMoved;
+
+            var boardHost = new Panel { Dock = DockStyle.Fill, BackColor = GameTheme.SurfaceAlt, Padding = new Padding(10) };
+            _boardPanel = new BoardPanel { Dock = DockStyle.Fill, Margin = new Padding(0) };
+            _boardPanel.IntersectionClicked += OnIntersectionClicked;
+            boardHost.Controls.Add(_boardPanel);
+
+            gameArea.Controls.Add(_cannon1, 0, 0);
+            gameArea.Controls.Add(boardHost, 1, 0);
+            gameArea.Controls.Add(_cannon2, 2, 0);
+            root.Controls.Add(gameArea, 0, 1);
+
+            var btnPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = GameTheme.Surface,
+                Padding = new Padding(12, 12, 12, 10)
+            };
+            btnPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 68));
+            btnPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
+
+            var btnFlow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoScroll = true,
+                BackColor = Color.Transparent
+            };
+
+            _btnEnd = new Button { Text = "Terminer", Size = new Size(120, 36) };
+            _btnUndo = new Button { Text = "Restaurer (Ctrl+Z)", Size = new Size(160, 36) };
+            _btnReset = new Button { Text = "Réinitialiser", Size = new Size(130, 36) };
+            _btnPrev = new Button { Text = "Précédent", Size = new Size(120, 36), Visible = _snapshotRepo != null };
+            _btnNext = new Button { Text = "Suivant", Size = new Size(120, 36), Visible = _snapshotRepo != null };
+            _lblReplay = new Label
+            {
+                Text = "",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleRight,
+                ForeColor = Color.FromArgb(87, 100, 121),
+                Font = GameTheme.UiFont,
+                Visible = _snapshotRepo != null
+            };
+
+            GameTheme.StyleDangerButton(_btnEnd);
+            GameTheme.StyleAccentButton(_btnUndo);
+            GameTheme.StylePrimaryButton(_btnReset);
+            GameTheme.StyleNeutralButton(_btnPrev);
+            GameTheme.StyleNeutralButton(_btnNext);
+
             _btnEnd.Click += (s, e) => EndGame();
             _btnUndo.Click += (s, e) => UndoMove();
             _btnReset.Click += (s, e) => ResetGame();
             _btnPrev.Click += (s, e) => GoToPreviousSnapshot();
             _btnNext.Click += (s, e) => GoToNextSnapshot();
-            btnPanel.Controls.AddRange(new Control[] { _btnEnd, _btnUndo, _btnReset, _btnPrev, _btnNext, _lblReplay });
-            Controls.Add(btnPanel);
 
-            // Canons (ajoutés AVANT le plateau — avec Dock, WinForms place
-            // les Left/Right d'abord, puis Fill remplit ce qui reste)
-            _cannon1 = new CannonWidget(1) { Dock = DockStyle.Left, Width = 80 };
-            _cannon2 = new CannonWidget(2) { Dock = DockStyle.Right, Width = 80 };
-            _cannon1.CannonMoved += OnCannonMoved;
-            _cannon2.CannonMoved += OnCannonMoved;
-            Controls.Add(_cannon2);
-            Controls.Add(_cannon1);
+            btnFlow.Controls.AddRange(new Control[] { _btnEnd, _btnUndo, _btnReset, _btnPrev, _btnNext });
+            btnPanel.Controls.Add(btnFlow, 0, 0);
+            btnPanel.Controls.Add(_lblReplay, 1, 0);
+            root.Controls.Add(btnPanel, 0, 2);
 
-            // Plateau (ajouté EN DERNIER pour que Dock=Fill prenne l'espace restant)
-            _boardPanel = new BoardPanel { Dock = DockStyle.Fill };
-            _boardPanel.IntersectionClicked += OnIntersectionClicked;
-            Controls.Add(_boardPanel);
+            Controls.Add(root);
 
             if (_isReadOnlyTimelineMode)
             {

@@ -6,6 +6,7 @@ using JeuDePoints.Data.Repositories;
 using JeuDePoints.Data;
 using JeuDePoints.Services;
 using JeuDePoints.Domain.Models;
+using JeuDePoints.Ui;
 
 
 namespace JeuDePoints.Forms
@@ -55,69 +56,157 @@ namespace JeuDePoints.Forms
         private void InitializeComponents()
         {
             Text = "Jeu de Points — Configuration";
-            Size = new Size(860, 560);
+            Size = new Size(1080, 700);
+            MinimumSize = new Size(980, 620);
             StartPosition = FormStartPosition.CenterScreen;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
+            BackColor = GameTheme.WindowBackground;
 
-            var layout = new TableLayoutPanel
+            var root = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(20),
-                RowCount = 8,
-                ColumnCount = 2
+                Padding = new Padding(16),
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            layout.Controls.Add(new Label { Text = "Nombre de lignes :", Anchor = AnchorStyles.Left | AnchorStyles.Right }, 0, 0);
-            _numRows = new NumericUpDown { Minimum = 2, Maximum = 50, Value = 15, Dock = DockStyle.Fill };
-            layout.Controls.Add(_numRows, 1, 0);
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            layout.Controls.Add(new Label { Text = "Nombre de colonnes :", Anchor = AnchorStyles.Left | AnchorStyles.Right }, 0, 1);
-            _numCols = new NumericUpDown { Minimum = 2, Maximum = 50, Value = 20, Dock = DockStyle.Fill };
-            layout.Controls.Add(_numCols, 1, 1);
+            var header = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = GameTheme.Surface,
+                Padding = new Padding(18, 14, 18, 12)
+            };
 
-            layout.Controls.Add(new Label { Text = "Nom Joueur 1 :", Anchor = AnchorStyles.Left | AnchorStyles.Right }, 0, 2);
-            _txtPlayer1 = new TextBox { Text = "Joueur 1", Dock = DockStyle.Fill };
-            layout.Controls.Add(_txtPlayer1, 1, 2);
+            var lblTitle = new Label
+            {
+                Text = "Jeu de Points",
+                Font = GameTheme.TitleFont,
+                ForeColor = Color.FromArgb(29, 39, 56),
+                Dock = DockStyle.Top,
+                Height = 38
+            };
 
-            layout.Controls.Add(new Label { Text = "Nom Joueur 2 :", Anchor = AnchorStyles.Left | AnchorStyles.Right }, 0, 3);
-            _txtPlayer2 = new TextBox { Text = "Joueur 2", Dock = DockStyle.Fill };
-            layout.Controls.Add(_txtPlayer2, 1, 3);
+            var lblSubtitle = new Label
+            {
+                Text = "Configure une nouvelle partie ou reprends une session existante.",
+                Font = GameTheme.UiFont,
+                ForeColor = Color.FromArgb(101, 115, 138),
+                Dock = DockStyle.Top,
+                Height = 24
+            };
 
-            _lblError = new Label { ForeColor = Color.Red, Dock = DockStyle.Fill, Text = "" };
-            layout.Controls.Add(_lblError, 0, 4);
-            layout.SetColumnSpan(_lblError, 2);
+            header.Controls.Add(lblSubtitle);
+            header.Controls.Add(lblTitle);
+            root.Controls.Add(header, 0, 0);
+
+            var content = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = Color.Transparent,
+                Padding = new Padding(0, 10, 0, 0)
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62));
+
+            var setupCard = new Panel { Dock = DockStyle.Fill };
+            GameTheme.StyleCard(setupCard);
+            var setupLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 7,
+                BackColor = Color.Transparent
+            };
+            setupLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 46));
+            setupLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 54));
+            setupLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            setupLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            setupLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            setupLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            setupLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            setupLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            setupLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+
+            var lblSetupTitle = new Label
+            {
+                Text = "Nouvelle partie",
+                Font = GameTheme.SectionFont,
+                ForeColor = Color.FromArgb(35, 48, 69),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            setupLayout.Controls.Add(lblSetupTitle, 0, 0);
+            setupLayout.SetColumnSpan(lblSetupTitle, 2);
+
+            setupLayout.Controls.Add(CreateFieldLabel("Nombre de lignes"), 0, 1);
+            _numRows = new NumericUpDown { Minimum = 2, Maximum = 50, Value = 15, Dock = DockStyle.Fill, Font = GameTheme.UiFont };
+            StyleInput(_numRows);
+            setupLayout.Controls.Add(_numRows, 1, 1);
+
+            setupLayout.Controls.Add(CreateFieldLabel("Nombre de colonnes"), 0, 2);
+            _numCols = new NumericUpDown { Minimum = 2, Maximum = 50, Value = 20, Dock = DockStyle.Fill, Font = GameTheme.UiFont };
+            StyleInput(_numCols);
+            setupLayout.Controls.Add(_numCols, 1, 2);
+
+            setupLayout.Controls.Add(CreateFieldLabel("Nom Joueur 1"), 0, 3);
+            _txtPlayer1 = new TextBox { Text = "Joueur 1", Dock = DockStyle.Fill, Font = GameTheme.UiFont };
+            StyleInput(_txtPlayer1);
+            setupLayout.Controls.Add(_txtPlayer1, 1, 3);
+
+            setupLayout.Controls.Add(CreateFieldLabel("Nom Joueur 2"), 0, 4);
+            _txtPlayer2 = new TextBox { Text = "Joueur 2", Dock = DockStyle.Fill, Font = GameTheme.UiFont };
+            StyleInput(_txtPlayer2);
+            setupLayout.Controls.Add(_txtPlayer2, 1, 4);
+
+            _lblError = new Label
+            {
+                ForeColor = GameTheme.Danger,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = GameTheme.UiFont,
+                Text = ""
+            };
+            setupLayout.Controls.Add(_lblError, 0, 5);
+            setupLayout.SetColumnSpan(_lblError, 2);
 
             _btnStart = new Button
             {
                 Text = "Démarrer la partie",
                 Dock = DockStyle.Fill,
-                BackColor = Color.SteelBlue,
-                ForeColor = Color.White
+                Height = 42
             };
+            GameTheme.StylePrimaryButton(_btnStart);
             _btnStart.Click += BtnStart_Click;
-            layout.Controls.Add(_btnStart, 0, 5);
-            layout.SetColumnSpan(_btnStart, 2);
+            setupLayout.Controls.Add(_btnStart, 0, 6);
+            setupLayout.SetColumnSpan(_btnStart, 2);
+            setupCard.Controls.Add(setupLayout);
+
+            var listCard = new Panel { Dock = DockStyle.Fill };
+            GameTheme.StyleCard(listCard);
+            var listLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent
+            };
+            listLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            listLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             var lblGames = new Label
             {
                 Text = "Parties existantes",
-                Anchor = AnchorStyles.Left,
-                AutoSize = true,
-                Font = new Font("Segoe UI", 10, FontStyle.Bold)
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = GameTheme.SectionFont,
+                ForeColor = Color.FromArgb(35, 48, 69)
             };
-            layout.Controls.Add(lblGames, 0, 6);
-            layout.SetColumnSpan(lblGames, 2);
+            listLayout.Controls.Add(lblGames, 0, 0);
 
             _gridGames = new DataGridView
             {
@@ -127,8 +216,14 @@ namespace JeuDePoints.Forms
                 AllowUserToDeleteRows = false,
                 AutoGenerateColumns = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false
+                MultiSelect = false,
+                BorderStyle = BorderStyle.None,
+                BackgroundColor = Color.White,
+                GridColor = Color.FromArgb(224, 231, 243),
+                ColumnHeadersHeight = 36,
+                RowTemplate = { Height = 34 }
             };
+            StyleGrid(_gridGames);
 
             _gridGames.CellContentClick += GridGames_CellContentClick;
 
@@ -169,10 +264,54 @@ namespace JeuDePoints.Forms
                 Name = "ActionColumn"
             });
 
-            layout.Controls.Add(_gridGames, 0, 7);
-            layout.SetColumnSpan(_gridGames, 2);
+            listLayout.Controls.Add(_gridGames, 0, 1);
+            listCard.Controls.Add(listLayout);
 
-            Controls.Add(layout);
+            content.Controls.Add(setupCard, 0, 0);
+            content.Controls.Add(listCard, 1, 0);
+            root.Controls.Add(content, 0, 1);
+            Controls.Add(root);
+        }
+
+        private static Label CreateFieldLabel(string text)
+        {
+            return new Label
+            {
+                Text = text,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = GameTheme.UiFontBold,
+                ForeColor = Color.FromArgb(54, 67, 88)
+            };
+        }
+
+        private static void StyleInput(Control control)
+        {
+            control.BackColor = Color.FromArgb(248, 250, 255);
+            control.ForeColor = Color.FromArgb(44, 55, 73);
+            control.Margin = new Padding(2, 5, 2, 5);
+        }
+
+        private static void StyleGrid(DataGridView grid)
+        {
+            grid.EnableHeadersVisualStyles = false;
+            grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.FromArgb(235, 241, 251),
+                ForeColor = Color.FromArgb(39, 51, 71),
+                Font = GameTheme.UiFontBold,
+                SelectionBackColor = Color.FromArgb(214, 226, 247),
+                SelectionForeColor = Color.FromArgb(39, 51, 71)
+            };
+
+            grid.DefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.White,
+                ForeColor = Color.FromArgb(46, 59, 80),
+                SelectionBackColor = Color.FromArgb(219, 232, 252),
+                SelectionForeColor = Color.FromArgb(34, 47, 66),
+                Font = GameTheme.UiFont
+            };
         }
 
         private void LoadGamesList()

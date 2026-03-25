@@ -1,5 +1,7 @@
 ﻿using JeuDePoints.Domain.Models;
 using SystemPoint = System.Drawing.Point;
+using System.Drawing.Drawing2D;
+using JeuDePoints.Ui;
 
 namespace JeuDePoints.Controls
 {
@@ -13,17 +15,17 @@ namespace JeuDePoints.Controls
         public BoardPanel()
         {
             DoubleBuffered = true;
-            BackColor = Color.White;
+            BackColor = Color.FromArgb(248, 250, 255);
         }
 
         public void UpdateState(GameState state)
         {
             _state = state;
             // Réserver de l'espace pour les canons dessinés dans le panel + padding
-            int availableW = Width - 120;
-            int availableH = Height - 40;
+            int availableW = Width - 90;
+            int availableH = Height - 90;
             _cellSize = Math.Min(availableW / (state.Columns + 1), availableH / (state.Rows + 1));
-            _cellSize = Math.Max(_cellSize, 20);
+            _cellSize = Math.Max(_cellSize, 24);
             Invalidate();
         }
 
@@ -42,21 +44,35 @@ namespace JeuDePoints.Controls
 
         private void DrawGrid(Graphics g)
         {
-            var pen = new Pen(Color.LightGray, 1);
+            using var pen = new Pen(Color.FromArgb(196, 207, 226), 1.2f);
             for (int r = 0; r < _state!.Rows; r++)
                 g.DrawLine(pen, GetX(0), GetY(r), GetX(_state.Columns - 1), GetY(r));
             for (int c = 0; c < _state.Columns; c++)
                 g.DrawLine(pen, GetX(c), GetY(0), GetX(c), GetY(_state.Rows - 1));
+
+            using var nodeBrush = new SolidBrush(Color.FromArgb(170, 183, 205));
+            int nodeSize = Math.Max(3, _cellSize / 8);
+            for (int r = 0; r < _state.Rows; r++)
+            {
+                for (int c = 0; c < _state.Columns; c++)
+                {
+                    g.FillEllipse(nodeBrush, GetX(c) - nodeSize / 2, GetY(r) - nodeSize / 2, nodeSize, nodeSize);
+                }
+            }
         }
 
         private void DrawPoints(Graphics g)
         {
             foreach (var p in _state!.Points.Where(p => p.IsActive))
             {
-                var brush = p.PlayerId == 1 ? Brushes.SteelBlue : Brushes.Crimson;
-                int x = GetX(p.Col) - 8;
-                int y = GetY(p.Row) - 8;
-                g.FillEllipse(brush, x, y, 16, 16);
+                var color = p.PlayerId == 1 ? GameTheme.Player1 : GameTheme.Player2;
+                using var brush = new SolidBrush(color);
+                using var outline = new Pen(Color.White, 1.8f);
+                int radius = Math.Max(8, _cellSize / 4);
+                int x = GetX(p.Col) - radius;
+                int y = GetY(p.Row) - radius;
+                g.FillEllipse(brush, x, y, radius * 2, radius * 2);
+                g.DrawEllipse(outline, x, y, radius * 2, radius * 2);
             }
         }
 
@@ -64,8 +80,12 @@ namespace JeuDePoints.Controls
         {
             foreach (var line in _state!.ValidatedLines)
             {
-                var color = line.PlayerId == 1 ? Color.SteelBlue : Color.Crimson;
-                var pen = new Pen(color, 3);
+                var color = line.PlayerId == 1 ? GameTheme.Player1 : GameTheme.Player2;
+                using var pen = new Pen(color, 4f)
+                {
+                    StartCap = LineCap.Round,
+                    EndCap = LineCap.Round
+                };
                 var cells = line.GetCells().ToList();
                 var first = cells.First();
                 var last = cells.Last();
@@ -76,12 +96,14 @@ namespace JeuDePoints.Controls
 
         private void DrawBlockedCells(Graphics g)
         {
-            var brush = new SolidBrush(Color.FromArgb(40, Color.Gray));
+            using var brush = new SolidBrush(Color.FromArgb(95, 100, 114, 136));
+            using var stroke = new Pen(Color.FromArgb(130, 84, 96, 120), 1.2f);
             foreach (var b in _state!.BlockedCells)
             {
                 int x = GetX(b.Col) - _cellSize / 2;
                 int y = GetY(b.Row) - _cellSize / 2;
                 g.FillRectangle(brush, x, y, _cellSize, _cellSize);
+                g.DrawRectangle(stroke, x, y, _cellSize, _cellSize);
             }
         }
 
@@ -100,11 +122,13 @@ namespace JeuDePoints.Controls
                     ? GetX(0) - _cellSize - 10
                     : GetX(_state.Columns - 1) + 10;
 
-                var color = playerId == 1 ? Color.SteelBlue : Color.Crimson;
-                var brush = new SolidBrush(color);
+                var color = playerId == 1 ? GameTheme.Player1 : GameTheme.Player2;
+                using var brush = new SolidBrush(color);
+                using var outline = new Pen(Color.FromArgb(36, 46, 62), 1f);
 
                 // Corps
                 g.FillRectangle(brush, x, y - 8, 20, 16);
+                g.DrawRectangle(outline, x, y - 8, 20, 16);
 
                 // Tube
                 if (playerId == 1)

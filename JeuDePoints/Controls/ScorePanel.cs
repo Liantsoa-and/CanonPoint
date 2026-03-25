@@ -4,6 +4,7 @@ using System.Text;
 using SystemPoint = System.Drawing.Point;
 
 using JeuDePoints.Domain.Models;
+using JeuDePoints.Ui;
 
 namespace JeuDePoints.Controls
 {
@@ -16,44 +17,60 @@ namespace JeuDePoints.Controls
 
         public ScorePanel()
         {
-            Height = 60;
-            Dock = DockStyle.Top;
-            BackColor = Color.FromArgb(30, 30, 30);
+            Height = 68;
+            BackColor = GameTheme.Surface;
+            Padding = new Padding(10, 6, 10, 6);
             InitializeComponents();
         }
 
         private void InitializeComponents()
         {
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 4,
+                RowCount = 1,
+                BackColor = Color.Transparent
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
+
             _lblScore1 = new Label
             {
-                ForeColor = Color.SteelBlue,
-                Font = new Font("Arial", 14, FontStyle.Bold),
-                AutoSize = true,
-                Location = new SystemPoint(20, 15)
+                ForeColor = GameTheme.Player1,
+                Font = new Font("Bahnschrift SemiBold", 14, FontStyle.Regular),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
             };
             _lblScore2 = new Label
             {
-                ForeColor = Color.Crimson,
-                Font = new Font("Arial", 14, FontStyle.Bold),
-                AutoSize = true,
-                Location = new SystemPoint(200, 15)
+                ForeColor = GameTheme.Player2,
+                Font = new Font("Bahnschrift SemiBold", 14, FontStyle.Regular),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
             };
             _lblTurn = new Label
             {
-                ForeColor = Color.White,
-                Font = new Font("Arial", 11),
-                AutoSize = true,
-                Location = new SystemPoint(400, 10)
+                ForeColor = Color.FromArgb(47, 57, 73),
+                Font = GameTheme.UiFontBold,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
             };
             _lblMove = new Label
             {
-                ForeColor = Color.LightGray,
-                Font = new Font("Arial", 9),
-                AutoSize = true,
-                Location = new SystemPoint(400, 35)
+                ForeColor = Color.FromArgb(98, 111, 133),
+                Font = GameTheme.UiFont,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleRight
             };
 
-            Controls.AddRange(new Control[] { _lblScore1, _lblScore2, _lblTurn, _lblMove });
+            layout.Controls.Add(_lblScore1, 0, 0);
+            layout.Controls.Add(_lblScore2, 1, 0);
+            layout.Controls.Add(_lblTurn, 2, 0);
+            layout.Controls.Add(_lblMove, 3, 0);
+            Controls.Add(layout);
         }
 
         public void Refresh(GameState state, int moveNumber)
@@ -62,6 +79,10 @@ namespace JeuDePoints.Controls
             _lblScore2.Text = $"{state.Player2Name} : {state.ScoreP2}";
             _lblTurn.Text = $"Tour : {state.GetCurrentPlayerName()}";
             _lblMove.Text = $"Mouvement n°{moveNumber}";
+
+            _lblTurn.ForeColor = _lblTurn.Text.Contains(state.Player1Name, StringComparison.OrdinalIgnoreCase)
+                ? GameTheme.Player1
+                : GameTheme.Player2;
         }
     }
 }
