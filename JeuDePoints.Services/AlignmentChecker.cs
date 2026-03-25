@@ -133,12 +133,18 @@ namespace JeuDePoints.Services
 
         public bool IsNewLine(ValidatedLine line, List<ValidatedLine> existing)
         {
-            // Si une ligne du même joueur et même direction partage au moins une case,
-            // on considère que c'est la même ligne (extension) → pas de nouveau point.
+            // Autoriser un recouvrement d'une seule case (extrémité partagée),
+            // mais refuser les recouvrements plus larges qui représentent la même ligne.
+            var lineCells = line.GetCells().ToHashSet();
+
             return !existing.Any(e =>
-                e.PlayerId == line.PlayerId &&
-                e.Direction == line.Direction &&
-                e.GetCells().Any(c => line.GetCells().Contains(c)));
+            {
+                if (e.PlayerId != line.PlayerId || e.Direction != line.Direction)
+                    return false;
+
+                int overlap = e.GetCells().Count(c => lineCells.Contains(c));
+                return overlap >= 2;
+            });
         }
     }
 }
