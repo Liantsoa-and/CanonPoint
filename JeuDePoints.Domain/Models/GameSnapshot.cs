@@ -45,6 +45,12 @@ namespace JeuDePoints.Domain.Models
                     row = b.Row,
                     col = b.Col,
                     blocking_player_id = b.BlockingPlayerId
+                }),
+                resurrection_rights = state.ResurrectionRights.Select(r => new
+                {
+                    player_id = r.PlayerId,
+                    row = r.Row,
+                    col = r.Col
                 })
             };
 
@@ -98,6 +104,21 @@ namespace JeuDePoints.Domain.Models
                     Col = (int)b.col,
                     BlockingPlayerId = (int)b.blocking_player_id
                 });
+
+            try
+            {
+                foreach (var rr in d.resurrection_rights)
+                    state.ResurrectionRights.Add(new ResurrectionRight
+                    {
+                        PlayerId = (int)rr.player_id,
+                        Row = (int)rr.row,
+                        Col = (int)rr.col
+                    });
+            }
+            catch
+            {
+                // Snapshots plus anciens: pas de droits de resurrection.
+            }
 
             return state;
         }

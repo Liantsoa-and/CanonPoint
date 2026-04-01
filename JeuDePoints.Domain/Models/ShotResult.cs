@@ -14,5 +14,7 @@ namespace JeuDePoints.Domain.Models
         public string InvalidReason { get; set; } = "";
         public List<(int row, int col)> Trajectory { get; set; } = new();
         public bool WasBlockedByLine { get; set; } = false;
+        public bool ShouldDeactivateTargetPoint { get; set; } = false;
+        public bool ShouldResurrectOwnPoint { get; set; } = false;
     }
 }

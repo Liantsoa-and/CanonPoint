@@ -40,8 +40,21 @@ namespace JeuDePoints.Services
                 Trajectory = GetTrajectory(targetRow, targetCol, playerId, state.Columns)
             };
 
+            bool canResurrectOnCell = state.ResurrectionRights.Any(r =>
+                r.PlayerId == playerId &&
+                r.Row == targetRow &&
+                r.Col == targetCol);
+
             if (targetPoint == null)
             {
+                if (canResurrectOnCell)
+                {
+                    result.IsValid = true;
+                    result.Hit = false;
+                    result.ShouldResurrectOwnPoint = true;
+                    return result;
+                }
+
                 result.IsValid = false;
                 result.Hit = false;
                 result.InvalidReason = "Aucun point sur la cible.";
@@ -67,6 +80,8 @@ namespace JeuDePoints.Services
 
             result.IsValid = true;
             result.Hit = true;
+            result.ShouldDeactivateTargetPoint = true;
+            result.ShouldResurrectOwnPoint = canResurrectOnCell;
             return result;
         }
 

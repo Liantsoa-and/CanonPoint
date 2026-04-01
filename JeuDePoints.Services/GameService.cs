@@ -94,6 +94,11 @@ namespace JeuDePoints.Services
                 });
             }
 
+            state.ResurrectionRights.RemoveAll(r =>
+                r.PlayerId == playerId &&
+                r.Row == row &&
+                r.Col == col);
+
             // Vérifier les alignements
             var newLines = _alignmentChecker.CheckAlignments(state, row, col, playerId);
             foreach (var line in newLines)
@@ -159,18 +164,105 @@ namespace JeuDePoints.Services
 
             state.LastShotWasValid = shotResult.IsValid;
             state.LastShotMessage = shotResult.IsValid
-                ? "Tir valide."
+                ? BuildShotSuccessMessage(shotResult)
                 : shotResult.InvalidReason;
             state.LastShotTargetRow = shotResult.TargetRow;
             state.LastShotTargetCol = shotResult.TargetCol;
 
             // Si la balle a touché un point adverse, le désactiver
-            if (shotResult.Hit)
+            if (shotResult.ShouldDeactivateTargetPoint)
             {
-                _pointRepo.DeactivatePoint(state.GameId, shotResult.TargetRow, shotResult.TargetCol);
                 var point = state.Points.FirstOrDefault(p =>
                     p.Row == shotResult.TargetRow && p.Col == shotResult.TargetCol && p.IsActive);
-                if (point != null) point.IsActive = false;
+                if (point != null)
+                {
+                    _pointRepo.DeactivatePoint(state.GameId, shotResult.TargetRow, shotResult.TargetCol);
+                    point.IsActive = false;
+
+                    if (!state.ResurrectionRights.Any(r =>
+                        r.PlayerId == point.PlayerId &&
+                        r.Row == point.Row &&
+                        r.Col == point.Col))
+                    {
+                        state.ResurrectionRights.Add(new ResurrectionRight
+                        {
+                            PlayerId = point.PlayerId,
+                            Row = point.Row,
+                            Col = point.Col
+                        });
+                    }
+                }
+            }
+
+            if (shotResult.ShouldResurrectOwnPoint)
+            {
+                int resurrectedId = _pointRepo.AddPoint(
+                    state.GameId,
+                    playerId,
+                    shotResult.TargetRow,
+                    shotResult.TargetCol);
+
+                var existing = state.Points.FirstOrDefault(p =>
+                    p.Row == shotResult.TargetRow &&
+                    p.Col == shotResult.TargetCol);
+
+                if (existing != null)
+                {
+                    existing.Id = resurrectedId;
+                    existing.PlayerId = playerId;
+                    existing.IsActive = true;
+                }
+                else
+                {
+                    state.Points.Add(new Point
+                    {
+                        Id = resurrectedId,
+                        GameId = state.GameId,
+                        PlayerId = playerId,
+                        Row = shotResult.TargetRow,
+                        Col = shotResult.TargetCol,
+                        IsActive = true
+                    });
+                }
+
+                state.ResurrectionRights.RemoveAll(r =>
+                    r.PlayerId == playerId &&
+                    r.Row == shotResult.TargetRow &&
+                    r.Col == shotResult.TargetCol);
+
+                // Une resurrection est equivalente a un nouveau point pose:
+                // elle peut donc creer une ligne validee.
+                var newLines = _alignmentChecker.CheckAlignments(
+                    state,
+                    shotResult.TargetRow,
+                    shotResult.TargetCol,
+                    playerId);
+
+                foreach (var line in newLines)
+                {
+                    line.GameId = state.GameId;
+                    int lineId = _lineRepo.AddValidatedLine(line);
+                    line.Id = lineId;
+                    state.ValidatedLines.Add(line);
+
+                    var cells = line.GetCells().ToList();
+                    _blockedRepo.AddBlockedCells(state.GameId, lineId, cells, playerId);
+                    foreach (var (r, c) in cells)
+                        state.BlockedCells.Add(new BlockedCell
+                        {
+                            GameId = state.GameId,
+                            ValidatedLineId = lineId,
+                            Row = r,
+                            Col = c,
+                            BlockingPlayerId = playerId
+                        });
+
+                    if (playerId == 1) state.ScoreP1++;
+                    else state.ScoreP2++;
+                }
+
+                if (newLines.Count > 0)
+                    _gameRepo.UpdateScores(state.GameId, state.ScoreP1, state.ScoreP2);
             }
 
             int moveNumber = _moveRepo.GetLastMoveNumber(state.GameId) + 1;
@@ -208,6 +300,20 @@ namespace JeuDePoints.Services
 
             _cannonRepo.UpdatePosition(state.GameId, playerId, cannon.RowPosition);
             return state;
+        }
+
+        private static string BuildShotSuccessMessage(ShotResult shotResult)
+        {
+            if (shotResult.ShouldDeactivateTargetPoint && shotResult.ShouldResurrectOwnPoint)
+                return "Tir valide: point adverse detruit et point ressuscite.";
+
+            if (shotResult.ShouldResurrectOwnPoint)
+                return "Tir valide: point ressuscite.";
+
+            if (shotResult.ShouldDeactivateTargetPoint)
+                return "Tir valide: point adverse detruit.";
+
+            return "Tir valide.";
         }
 
         public GameState UndoLastMove(GameState state)

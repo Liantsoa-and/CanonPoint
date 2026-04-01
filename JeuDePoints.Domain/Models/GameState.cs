@@ -26,6 +26,7 @@ namespace JeuDePoints.Domain.Models
         public Dictionary<int, Cannon> Cannons { get; set; } = new();
         public List<ValidatedLine> ValidatedLines { get; set; } = new();
         public List<BlockedCell> BlockedCells { get; set; } = new();
+        public List<ResurrectionRight> ResurrectionRights { get; set; } = new();
 
         public bool IsFinished() => Status == "finished";
 
